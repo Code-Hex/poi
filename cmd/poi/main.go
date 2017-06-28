@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/Code-Hex/koi"
+	"github.com/Code-Hex/poi"
 )
 
 func main() {
-	os.Exit(koi.New().Run())
+	os.Exit(poi.New().Run())
 }

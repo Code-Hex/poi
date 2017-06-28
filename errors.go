@@ -1,4 +1,4 @@
-package koi
+package poi
 
 type causer interface {
 	Cause() error

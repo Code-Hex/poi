@@ -1,4 +1,4 @@
-package koi
+package poi
 
 import (
 	"bytes"
