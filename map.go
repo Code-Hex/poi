@@ -123,11 +123,6 @@ func newDict() *dict {
 	return d
 }
 
-func (d *dict) exist(key string) bool {
-	_, ok := d.m[key]
-	return ok
-}
-
 func (d *dict) set(key string, val *data) {
 	if _, ok := d.m[key]; !ok {
 		d.keys = append(d.keys, key)
