@@ -33,7 +33,8 @@ type data struct {
 
 var (
 	skip    error
-	dataMap map[string]*data
+	header  []string
+	dataMap *dict
 )
 
 func init() {
@@ -57,8 +58,13 @@ func init() {
 	4xx:
 	5xx:
 	*/
-
-	dataMap = make(map[string]*data)
+	header = []string{
+		"count", "min", "max", "avg",
+		"p10", "p50", "p90", "p95", "p99",
+		"bodymin", "bodymax", "bodyavg",
+		"method", "uri",
+	}
+	dataMap = newDict()
 }
 
 func (p *poi) analyze() error {
@@ -77,23 +83,19 @@ func (p *poi) analyze() error {
 		if err := p.makeResult(data); err != nil {
 			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
 		}
-		renderTable()
+		p.renderTable()
 		l++
 	}
 	return nil
 }
 
-func renderTable() {
+func (p *poi) renderTable() {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{
-		"count", "min", "max", "avg",
-		"p10", "p50", "p90", "p95", "p99",
-		"bodymin", "bodymax", "bodyavg",
-		"method", "uri",
-	})
+	table.SetHeader(header)
 
-	data := make([][]string, len(dataMap))
-	for key, val := range dataMap {
+	data := make([][]string, len(dataMap.keys))
+	for _, key := range dataMap.sortedKeys(p.Sortby) {
+		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
 		data = append(data, []string{
@@ -166,8 +168,9 @@ func (p *poi) makeResult(tmp map[string]string) error {
 	}
 
 	key := uri + ":" + method
-	if _, ok := dataMap[key]; !ok {
-		dataMap[key] = &data{
+	dict := dataMap.get(key)
+	if dict == nil {
+		dataMap.set(key, &data{
 			count:         1,
 			minTime:       resTime,
 			maxTime:       resTime,
@@ -181,58 +184,59 @@ func (p *poi) makeResult(tmp map[string]string) error {
 			maxBody:       bodySize,
 			avgBody:       bodySize,
 			responseTimes: []float64{resTime},
-		}
+		})
+		dict = dataMap.get(key)
 	} else {
-		dataMap[key].count++
+		dict.count++
 		// Current response time
-		dataMap[key].responseTimes = append(dataMap[key].responseTimes, resTime)
-		sort.Float64s(dataMap[key].responseTimes)
+		dict.responseTimes = append(dict.responseTimes, resTime)
+		sort.Float64s(dict.responseTimes)
 
-		p10idx := getPercentileIdx(dataMap[key].count, 10)
-		p50idx := getPercentileIdx(dataMap[key].count, 50)
-		p90idx := getPercentileIdx(dataMap[key].count, 90)
-		p95idx := getPercentileIdx(dataMap[key].count, 95)
-		p99idx := getPercentileIdx(dataMap[key].count, 99)
+		p10idx := getPercentileIdx(dict.count, 10)
+		p50idx := getPercentileIdx(dict.count, 50)
+		p90idx := getPercentileIdx(dict.count, 90)
+		p95idx := getPercentileIdx(dict.count, 95)
+		p99idx := getPercentileIdx(dict.count, 99)
 
-		dataMap[key].p10 = dataMap[key].responseTimes[p10idx]
-		dataMap[key].p50 = dataMap[key].responseTimes[p50idx]
-		dataMap[key].p90 = dataMap[key].responseTimes[p90idx]
-		dataMap[key].p95 = dataMap[key].responseTimes[p95idx]
-		dataMap[key].p99 = dataMap[key].responseTimes[p99idx]
+		dict.p10 = dict.responseTimes[p10idx]
+		dict.p50 = dict.responseTimes[p50idx]
+		dict.p90 = dict.responseTimes[p90idx]
+		dict.p95 = dict.responseTimes[p95idx]
+		dict.p99 = dict.responseTimes[p99idx]
 
-		if dataMap[key].maxTime < resTime {
-			dataMap[key].maxTime = resTime
+		if dict.maxTime < resTime {
+			dict.maxTime = resTime
 		}
-		if dataMap[key].minTime > resTime || dataMap[key].minTime == 0 {
-			dataMap[key].minTime = resTime
+		if dict.minTime > resTime || dict.minTime == 0 {
+			dict.minTime = resTime
 		}
-		now := float64(dataMap[key].count)
+		now := float64(dict.count)
 		before := now - 1.0
 
 		// newAvg = (oldAvg * lenOfoldAvg + newVal) / lenOfnewAvg
-		dataMap[key].avgTime = (dataMap[key].avgTime*before + resTime) / now
+		dict.avgTime = (dict.avgTime*before + resTime) / now
 
 		// Current response body size
-		if dataMap[key].maxBody < bodySize {
-			dataMap[key].maxBody = bodySize
+		if dict.maxBody < bodySize {
+			dict.maxBody = bodySize
 		}
-		if dataMap[key].minBody > bodySize || dataMap[key].minBody == 0 {
-			dataMap[key].minBody = bodySize
+		if dict.minBody > bodySize || dict.minBody == 0 {
+			dict.minBody = bodySize
 		}
 		// newAvg = (oldAvg * lenOfoldAvg + newVal) / lenOfnewAvg
-		dataMap[key].avgBody = (dataMap[key].avgBody*before + bodySize) / now
+		dict.avgBody = (dict.avgBody*before + bodySize) / now
 	}
 
 	// Current status code
 	switch statusCode[0] {
 	case '2':
-		dataMap[key].code2xx++
+		dict.code2xx++
 	case '3':
-		dataMap[key].code3xx++
+		dict.code3xx++
 	case '4':
-		dataMap[key].code4xx++
+		dict.code4xx++
 	case '5':
-		dataMap[key].code5xx++
+		dict.code5xx++
 	}
 	return nil
 }
