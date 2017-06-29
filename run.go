@@ -10,7 +10,7 @@ import (
 
 const (
 	version = "0.0.1"
-	msg     = name + " v" + version + ", Yet another access log profiler for ltsv\n"
+	msg     = name + " v" + version + ", Yet another access log profiler for ltsv"
 	name    = "poi"
 )
 
