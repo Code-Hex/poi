@@ -1,14 +1,16 @@
 package poi
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
-
-	"strconv"
-
+	"os/exec"
 	"sort"
-
+	"strconv"
 	"strings"
 
 	"github.com/Code-Hex/exit"
@@ -38,28 +40,9 @@ var (
 )
 
 func init() {
-	/* We need these keys
-	COUNT:
-	MIN:
-	MAX:
-	AVG:
-	P10:
-	P50:
-	P90:
-	P95:
-	P99:
-	MAX(BODY):
-	MIN(BODY):
-	AVG(BODY):
-	METHOD:
-	URI:
-	2xx:
-	3xx:
-	4xx:
-	5xx:
-	*/
 	header = []string{
-		"count", "min", "max", "avg",
+		"count",
+		"min", "max", "avg",
 		"p10", "p50", "p90", "p95", "p99",
 		"bodymin", "bodymax", "bodyavg",
 		"method", "uri",
@@ -68,6 +51,35 @@ func init() {
 }
 
 func (p *poi) analyze() error {
+	if p.TailMode {
+		return p.tailmode()
+	}
+	return p.normalmode()
+}
+
+func (p *poi) normalmode() error {
+	b, err := ioutil.ReadFile(p.Filename)
+	if err != nil {
+		return exit.MakeIOErr(err)
+	}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+
+	l := 1
+	for sc.Scan() {
+		data := parseLTSV(sc.Text())
+		if err := p.makeResult(data); err != nil {
+			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
+		}
+		l++
+	}
+	if err := sc.Err(); err != nil {
+		return exit.MakeSoftWare(errors.Wrap(err, "Failed to read file"))
+	}
+	p.renderTable()
+	return nil
+}
+
+func (p *poi) tailmode() error {
 	file, err := tail.TailFile(p.Filename, tailConfig())
 	if err != nil {
 		return exit.MakeIOErr(err)
@@ -83,6 +95,7 @@ func (p *poi) analyze() error {
 		if err := p.makeResult(data); err != nil {
 			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
 		}
+		clear(os.Stdout)
 		p.renderTable()
 		l++
 	}
@@ -273,4 +286,10 @@ func getPercentileIdx(len int, n int) int {
 		return 0
 	}
 	return idx
+}
+
+func clear(out io.Writer) error {
+	cmd := exec.Command("clear")
+	cmd.Stdout = out
+	return cmd.Run()
 }
