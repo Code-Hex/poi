@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ type poi struct {
 type data struct {
 	count                              int
 	minTime, maxTime, avgTime          float64
+	stdev                              float64
 	p10, p50, p90, p95, p99            float64
 	maxBody, minBody, avgBody          float64
 	code2xx, code3xx, code4xx, code5xx int
@@ -39,18 +41,29 @@ var (
 	dataMap *dict
 )
 
-func init() {
+func (p *poi) init() {
 	header = []string{
 		"count",
 		"min", "max", "avg",
-		"p10", "p50", "p90", "p95", "p99",
+		"stdev",
+	}
+
+	if p.Expand {
+		header = append(header, []string{
+			"p10", "p50", "p90", "p95", "p99",
+		}...)
+	}
+
+	header = append(header, []string{
 		"bodymin", "bodymax", "bodyavg",
 		"method", "uri",
-	}
+	}...)
+
 	dataMap = newDict()
 }
 
 func (p *poi) analyze() error {
+	p.init()
 	if p.TailMode {
 		return p.tailmode()
 	}
@@ -64,13 +77,11 @@ func (p *poi) normalmode() error {
 	}
 	sc := bufio.NewScanner(bytes.NewReader(b))
 
-	l := 1
-	for sc.Scan() {
+	for l := 1; sc.Scan(); l++ {
 		data := parseLTSV(sc.Text())
 		if err := p.makeResult(data); err != nil {
 			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
 		}
-		l++
 	}
 	if err := sc.Err(); err != nil {
 		return exit.MakeSoftWare(errors.Wrap(err, "Failed to read file"))
@@ -111,21 +122,32 @@ func (p *poi) renderTable() {
 		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
-		data = append(data, []string{
+		tmp := []string{
 			fmt.Sprintf("%d", val.count),
 			fmt.Sprintf("%.3f", val.minTime),
 			fmt.Sprintf("%.3f", val.maxTime),
 			fmt.Sprintf("%.3f", val.avgTime),
-			fmt.Sprintf("%.3f", val.p10),
-			fmt.Sprintf("%.3f", val.p50),
-			fmt.Sprintf("%.3f", val.p90),
-			fmt.Sprintf("%.3f", val.p95),
-			fmt.Sprintf("%.3f", val.p99),
+			fmt.Sprintf("%.3f", val.stdev),
+		}
+
+		if p.Expand {
+			tmp = append(tmp, []string{
+				fmt.Sprintf("%.3f", val.p10),
+				fmt.Sprintf("%.3f", val.p50),
+				fmt.Sprintf("%.3f", val.p90),
+				fmt.Sprintf("%.3f", val.p95),
+				fmt.Sprintf("%.3f", val.p99),
+			}...)
+		}
+
+		tmp = append(tmp, []string{
 			fmt.Sprintf("%.2f", val.minBody),
 			fmt.Sprintf("%.2f", val.maxBody),
 			fmt.Sprintf("%.2f", val.avgBody),
 			method, uri,
-		})
+		}...)
+
+		data = append(data, tmp)
 	}
 	table.AppendBulk(data)
 	table.Render()
@@ -188,6 +210,7 @@ func (p *poi) makeResult(tmp map[string]string) error {
 			minTime:       resTime,
 			maxTime:       resTime,
 			avgTime:       resTime,
+			stdev:         0,
 			p10:           resTime,
 			p50:           resTime,
 			p90:           resTime,
@@ -228,6 +251,15 @@ func (p *poi) makeResult(tmp map[string]string) error {
 
 		// newAvg = (oldAvg * lenOfoldAvg + newVal) / lenOfnewAvg
 		dict.avgTime = (dict.avgTime*before + resTime) / now
+
+		// standard deviation
+		// stdev = √[(1 / n - 1) * {Σ(xi - avg) ^ 2}]
+		stdev := float64(0)
+		for _, t := range dict.responseTimes {
+			diff := t - dict.avgTime
+			stdev += diff * diff
+		}
+		dict.stdev = math.Sqrt(stdev / before)
 
 		// Current response body size
 		if dict.maxBody < bodySize {

@@ -11,12 +11,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+const indent = "        "
+
 // Options struct for parse command line arguments
 type Options struct {
 	Help    bool `short:"h" long:"help" description:"show this message"`
 	Version bool `short:"v" long:"version" description:"print the version"`
 
 	TailMode   bool   `short:"t" long:"tail" description:"monitor the file and update the results in realtime"`
+	Expand     bool   `short:"x" long:"expand" description:"display more detailed information"`
 	Filename   string `short:"f" long:"file" required:"true" description:"specify the file of ltsv format access log"`
 	Sortby     string `long:"sort-by" default:"count,desc" description:"specify a format like 'label,order' for sorting"`
 	LabelAs    string `long:"label-as" description:"specify a yaml file with key and value for access log"`
@@ -53,7 +56,6 @@ Options:
 		fmt.Fprintf(&buf, "  %-21s %s\n", o, desc)
 
 		if deflt := tag.Get("default"); deflt != "" {
-			indent := "        "
 			fmt.Fprintf(&buf, "  %-21s default: --%s='%s'\n", indent, tag.Get("long"), deflt)
 		}
 	}
