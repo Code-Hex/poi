@@ -41,11 +41,14 @@ type data struct {
 
 var (
 	skip    error
+	uriCnt  int
 	header  []string
 	dataMap *dict
+	uriMap  map[string]bool
 )
 
 func (p *poi) init() {
+	uriMap = make(map[string]bool)
 	header = []string{
 		"COUNT",
 		"MIN", "MAX", "AVG",
@@ -132,7 +135,6 @@ tail:
 			if err := p.makeResult(data); err != nil {
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
 			}
-			clear(os.Stdout)
 			p.renderLikeTop(l)
 		}
 	}
@@ -163,7 +165,7 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 
 func (p *poi) renderLikeTop(line int) {
 	buf := os.Stdout
-
+	clear(buf)
 	read := 0
 	for _, key := range dataMap.keys {
 		val := dataMap.get(key)
@@ -171,12 +173,16 @@ func (p *poi) renderLikeTop(line int) {
 	}
 	ignore := line - read
 
-	fmt.Fprintf(buf, "Read lines: %d, Ignore lines: %d, Total URI number: %d\n\n", line, ignore, len(dataMap.keys))
+	fmt.Fprintf(buf, "Total URI number: %d\n", len(uriMap))
+	fmt.Fprintf(buf, "Read lines: %d, Ignore lines: %d\n\n", line, ignore)
+
+	// Rendering header
 	for _, h := range header {
 		fmt.Fprintf(buf, "%-9s", h)
 	}
 	fmt.Fprintf(buf, "\n")
 
+	// Rendering main data
 	for _, key := range dataMap.sortedKeys(p.Sortby) {
 		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
@@ -262,6 +268,11 @@ func (p *poi) makeResult(tmp map[string]string) error {
 		return skip
 	}
 	uri := parsed.Path
+
+	// Added to count number of uri
+	if _, ok := uriMap[uri]; !ok {
+		uriMap[uri] = true
+	}
 
 	statusCode, ok := tmp[p.StatusLabel]
 	if !ok {
