@@ -3,6 +3,7 @@ package poi
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,8 +15,11 @@ import (
 	"strconv"
 	"strings"
 
+	"sync"
+
 	"github.com/Code-Hex/exit"
 	"github.com/hpcloud/tail"
+	termbox "github.com/nsf/termbox-go"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 )
@@ -43,20 +47,20 @@ var (
 
 func (p *poi) init() {
 	header = []string{
-		"count",
-		"min", "max", "avg",
-		"stdev",
+		"COUNT",
+		"MIN", "MAX", "AVG",
+		"STDEV",
 	}
 
 	if p.Expand {
 		header = append(header, []string{
-			"p10", "p50", "p90", "p95", "p99",
+			"P10", "P50", "P90", "P95", "P99",
 		}...)
 	}
 
 	header = append(header, []string{
-		"bodymin", "bodymax", "bodyavg",
-		"method", "uri",
+		"BODYMIN", "BODYMAX", "BODYAVG",
+		"METHOD", "URI",
 	}...)
 
 	dataMap = newDict()
@@ -96,21 +100,116 @@ func (p *poi) tailmode() error {
 		return exit.MakeIOErr(err)
 	}
 
-	// Waiting channels
-	l := 1
-	for line := range file.Lines {
-		if line.Err != nil {
-			return exit.MakeIOErr(err)
+	if err := termbox.Init(); err != nil {
+		return exit.MakeSoftWare(err)
+	}
+	termbox.SetInputMode(termbox.InputEsc)
+
+	once := new(sync.Once)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer func() {
+		once.Do(cancel)
+		termbox.Close()
+	}()
+
+	go monitorKeys(ctx, cancel, once)
+
+tail:
+	for l := 1; ; l++ {
+		select {
+		case <-ctx.Done():
+			break tail
+		case line := <-file.Lines:
+			if line == nil {
+				// wait again only select
+				continue
+			}
+			if line.Err != nil {
+				return exit.MakeIOErr(err)
+			}
+			data := parseLTSV(line.Text)
+			if err := p.makeResult(data); err != nil {
+				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
+			}
+			clear(os.Stdout)
+			p.renderLikeTop(l)
 		}
-		data := parseLTSV(line.Text)
-		if err := p.makeResult(data); err != nil {
-			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
-		}
-		clear(os.Stdout)
-		p.renderTable()
-		l++
 	}
 	return nil
+}
+
+func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			switch ev := termbox.PollEvent(); ev.Type {
+			case termbox.EventKey:
+				if ev.Ch == 'q' {
+					once.Do(cancel)
+				}
+				switch ev.Key {
+				case termbox.KeyEsc, termbox.KeyCtrlC:
+					once.Do(cancel)
+				}
+			case termbox.EventError:
+				panic(ev.Err)
+			}
+		}
+	}
+}
+
+func (p *poi) renderLikeTop(line int) {
+	buf := os.Stdout
+
+	read := 0
+	for _, key := range dataMap.keys {
+		val := dataMap.get(key)
+		read += val.count
+	}
+	ignore := line - read
+
+	fmt.Fprintf(buf, "Read lines: %d, Ignore lines: %d, Total URI number: %d\n\n", line, ignore, len(dataMap.keys))
+	for _, h := range header {
+		fmt.Fprintf(buf, "%-9s", h)
+	}
+	fmt.Fprintf(buf, "\n")
+
+	for _, key := range dataMap.sortedKeys(p.Sortby) {
+		val := dataMap.get(key)
+		sep := strings.Split(key, ":")
+		uri, method := sep[0], sep[1]
+		fmt.Fprintf(
+			buf,
+			"%-9d%-9.3f%-9.3f%-9.3f%-9.3f",
+			val.count,
+			val.minTime,
+			val.maxTime,
+			val.avgTime,
+			val.stdev,
+		)
+		if p.Expand {
+			fmt.Fprintf(
+				buf,
+				"%-9.3f%-9.3f%-9.3f%-9.3f%-9.3f",
+				val.p10,
+				val.p50,
+				val.p90,
+				val.p95,
+				val.p99,
+			)
+		}
+		fmt.Fprintf(
+			buf,
+			"%-9.2f%-9.2f%-9.2f%-9s%-9s\n",
+			val.minBody,
+			val.maxBody,
+			val.avgBody,
+			method, uri,
+		)
+	}
 }
 
 func (p *poi) renderTable() {
