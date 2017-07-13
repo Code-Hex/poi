@@ -10,8 +10,7 @@ type sortFunc func(asc bool) func(i, j int) bool
 var sortMethod map[string]sortFunc
 
 func init() {
-	sortMethod = make(map[string]sortFunc, 12)
-
+	sortMethod = make(map[string]sortFunc, 13)
 }
 
 type dict struct {
@@ -54,6 +53,14 @@ func newDict() *dict {
 				return d.get(d.keys[i]).avgTime > d.get(d.keys[j]).avgTime
 			}
 			return d.get(d.keys[i]).avgTime < d.get(d.keys[j]).avgTime
+		}
+	}
+	sortMethod["avg"] = func(desc bool) func(i, j int) bool {
+		return func(i, j int) bool {
+			if desc {
+				return d.get(d.keys[i]).stdev > d.get(d.keys[j]).stdev
+			}
+			return d.get(d.keys[i]).stdev < d.get(d.keys[j]).stdev
 		}
 	}
 	sortMethod["p10"] = func(desc bool) func(i, j int) bool {

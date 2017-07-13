@@ -27,6 +27,8 @@ import (
 type poi struct {
 	Options
 	Label
+
+	header []string
 	stdout io.Writer
 	uriMap map[string]bool
 }
@@ -43,28 +45,29 @@ type data struct {
 
 var (
 	skip    error
-	header  []string
 	dataMap *dict
 )
 
 func (p *poi) init() {
-	header = []string{
+	p.header = make([]string, 0, 15)
+	p.header = append(p.header, []string{
 		"COUNT",
 		"MIN", "MAX", "AVG",
 		"STDEV",
-	}
+	}...)
 
 	if p.Expand {
-		header = append(header, []string{
+		p.header = append(p.header, []string{
 			"P10", "P50", "P90", "P95", "P99",
 		}...)
 	}
 
-	header = append(header, []string{
+	p.header = append(p.header, []string{
 		"BODYMIN", "BODYMAX", "BODYAVG",
 		"METHOD", "URI",
 	}...)
 
+	// dataMap is global
 	dataMap = newDict()
 }
 
@@ -176,7 +179,7 @@ func (p *poi) renderLikeTop(line int) {
 	fmt.Fprintf(p.stdout, "Read lines: %d, Ignore lines: %d\n\n", line, ignore)
 
 	// Rendering header
-	for _, h := range header {
+	for _, h := range p.header {
 		fmt.Fprintf(p.stdout, "%-9s", h)
 	}
 	fmt.Fprintf(p.stdout, "\n")
@@ -219,7 +222,7 @@ func (p *poi) renderLikeTop(line int) {
 
 func (p *poi) renderTable() {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader(header)
+	table.SetHeader(p.header)
 
 	data := make([][]string, len(dataMap.keys))
 	for _, key := range dataMap.sortedKeys(p.Sortby) {
