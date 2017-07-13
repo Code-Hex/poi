@@ -27,6 +27,8 @@ import (
 type poi struct {
 	Options
 	Label
+	stdout io.Writer
+	uriMap map[string]bool
 }
 
 type data struct {
@@ -41,14 +43,11 @@ type data struct {
 
 var (
 	skip    error
-	uriCnt  int
 	header  []string
 	dataMap *dict
-	uriMap  map[string]bool
 )
 
 func (p *poi) init() {
-	uriMap = make(map[string]bool)
 	header = []string{
 		"COUNT",
 		"MIN", "MAX", "AVG",
@@ -82,8 +81,8 @@ func (p *poi) normalmode() error {
 	if err != nil {
 		return exit.MakeIOErr(err)
 	}
-	sc := bufio.NewScanner(bytes.NewReader(b))
 
+	sc := bufio.NewScanner(bytes.NewReader(b))
 	for l := 1; sc.Scan(); l++ {
 		data := parseLTSV(sc.Text())
 		if err := p.makeResult(data); err != nil {
@@ -164,8 +163,8 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *poi) renderLikeTop(line int) {
-	buf := os.Stdout
-	clear(buf)
+	clear(p.stdout)
+
 	read := 0
 	for _, key := range dataMap.keys {
 		val := dataMap.get(key)
@@ -173,14 +172,14 @@ func (p *poi) renderLikeTop(line int) {
 	}
 	ignore := line - read
 
-	fmt.Fprintf(buf, "Total URI number: %d\n", len(uriMap))
-	fmt.Fprintf(buf, "Read lines: %d, Ignore lines: %d\n\n", line, ignore)
+	fmt.Fprintf(p.stdout, "Total URI number: %d\n", len(p.uriMap))
+	fmt.Fprintf(p.stdout, "Read lines: %d, Ignore lines: %d\n\n", line, ignore)
 
 	// Rendering header
 	for _, h := range header {
-		fmt.Fprintf(buf, "%-9s", h)
+		fmt.Fprintf(p.stdout, "%-9s", h)
 	}
-	fmt.Fprintf(buf, "\n")
+	fmt.Fprintf(p.stdout, "\n")
 
 	// Rendering main data
 	for _, key := range dataMap.sortedKeys(p.Sortby) {
@@ -188,7 +187,7 @@ func (p *poi) renderLikeTop(line int) {
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
 		fmt.Fprintf(
-			buf,
+			p.stdout,
 			"%-9d%-9.3f%-9.3f%-9.3f%-9.3f",
 			val.count,
 			val.minTime,
@@ -198,7 +197,7 @@ func (p *poi) renderLikeTop(line int) {
 		)
 		if p.Expand {
 			fmt.Fprintf(
-				buf,
+				p.stdout,
 				"%-9.3f%-9.3f%-9.3f%-9.3f%-9.3f",
 				val.p10,
 				val.p50,
@@ -208,7 +207,7 @@ func (p *poi) renderLikeTop(line int) {
 			)
 		}
 		fmt.Fprintf(
-			buf,
+			p.stdout,
 			"%-9.2f%-9.2f%-9.2f%-9s%-9s\n",
 			val.minBody,
 			val.maxBody,
@@ -270,8 +269,8 @@ func (p *poi) makeResult(tmp map[string]string) error {
 	uri := parsed.Path
 
 	// Added to count number of uri
-	if _, ok := uriMap[uri]; !ok {
-		uriMap[uri] = true
+	if _, ok := p.uriMap[uri]; !ok {
+		p.uriMap[uri] = true
 	}
 
 	statusCode, ok := tmp[p.StatusLabel]
@@ -434,4 +433,14 @@ func clear(out io.Writer) error {
 	cmd := exec.Command("clear")
 	cmd.Stdout = out
 	return cmd.Run()
+}
+
+func renderStr(x, y int, str string) {
+	renderStrWithColor(x, y, str, termbox.ColorDefault, termbox.ColorDefault)
+}
+
+func renderStrWithColor(x, y int, str string, fg, bg termbox.Attribute) {
+	for i, c := range str {
+		termbox.SetCell(x+i, y, c, fg, bg)
+	}
 }

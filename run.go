@@ -15,7 +15,10 @@ const (
 )
 
 func New() *poi {
-	return &poi{}
+	return &poi{
+		stdout: os.Stdout,
+		uriMap: make(map[string]bool),
+	}
 }
 
 func (p *poi) Run() int {
