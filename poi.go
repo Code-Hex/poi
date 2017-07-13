@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,6 +153,7 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				if ev.Ch == 'q' {
 					once.Do(cancel)
 				}
+				// special keys
 				switch ev.Key {
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
@@ -166,7 +166,7 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *poi) renderLikeTop(line int) {
-	clear(p.stdout)
+	//width, height := termbox.Size()
 
 	read := 0
 	for _, key := range dataMap.keys {
@@ -175,49 +175,55 @@ func (p *poi) renderLikeTop(line int) {
 	}
 	ignore := line - read
 
-	fmt.Fprintf(p.stdout, "Total URI number: %d\n", len(p.uriMap))
-	fmt.Fprintf(p.stdout, "Read lines: %d, Ignore lines: %d\n\n", line, ignore)
+	renderStr(0, 0, fmt.Sprintf("Total URI number: %d\n", len(p.uriMap)))
+	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d\n\n", line, ignore))
 
 	// Rendering header
-	for _, h := range p.header {
-		fmt.Fprintf(p.stdout, "%-9s", h)
+	var header string
+
+	for _, v := range p.header {
+		header += fmt.Sprintf("%-9s", v)
 	}
-	fmt.Fprintf(p.stdout, "\n")
+	renderStr(0, 3, header)
 
 	// Rendering main data
-	for _, key := range dataMap.sortedKeys(p.Sortby) {
+	for i, key := range dataMap.sortedKeys(p.Sortby) {
 		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
-		fmt.Fprintf(
-			p.stdout,
-			"%-9d%-9.3f%-9.3f%-9.3f%-9.3f",
+
+		format := "%-9d%-9.3f%-9.3f%-9.3f%-9.3f"
+		args := make([]interface{}, 0, 10)
+		args = append(args, []interface{}{
 			val.count,
 			val.minTime,
 			val.maxTime,
 			val.avgTime,
 			val.stdev,
-		)
+		}...)
+
 		if p.Expand {
-			fmt.Fprintf(
-				p.stdout,
-				"%-9.3f%-9.3f%-9.3f%-9.3f%-9.3f",
+			format += "%-9.3f%-9.3f%-9.3f%-9.3f%-9.3f"
+			args = append(args, []interface{}{
 				val.p10,
 				val.p50,
 				val.p90,
 				val.p95,
 				val.p99,
-			)
+			}...)
 		}
-		fmt.Fprintf(
-			p.stdout,
-			"%-9.2f%-9.2f%-9.2f%-9s%-9s\n",
+
+		format += "%-9.2f%-9.2f%-9.2f%-9s%-9s"
+		args = append(args, []interface{}{
 			val.minBody,
 			val.maxBody,
 			val.avgBody,
 			method, uri,
-		)
+		}...)
+
+		renderStr(0, 5+i, fmt.Sprintf(format, args...))
 	}
+	termbox.Flush()
 }
 
 func (p *poi) renderTable() {
@@ -430,12 +436,6 @@ func getPercentileIdx(len int, n int) int {
 		return 0
 	}
 	return idx
-}
-
-func clear(out io.Writer) error {
-	cmd := exec.Command("clear")
-	cmd.Stdout = out
-	return cmd.Run()
 }
 
 func renderStr(x, y int, str string) {
