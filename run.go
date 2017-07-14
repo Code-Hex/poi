@@ -14,7 +14,7 @@ const (
 	name    = "poi"
 )
 
-func (p *poi) Run() int {
+func (p *Poi) Run() int {
 	if e := p.run(); e != nil {
 		exitCode, err := UnwrapErrors(e)
 		if p.StackTrace {
@@ -27,7 +27,7 @@ func (p *poi) Run() int {
 	return 0
 }
 
-func (p *poi) run() error {
+func (p *Poi) run() error {
 	args, err := p.prepare()
 	if err != nil {
 		return err
@@ -38,12 +38,12 @@ func (p *poi) run() error {
 	return nil
 }
 
-func (p *poi) profile(args []string) error {
+func (p *Poi) profile(args []string) error {
 	// See, koi.go
 	return p.analyze()
 }
 
-func (p *poi) prepare() ([]string, error) {
+func (p *Poi) prepare() ([]string, error) {
 	args, err := parseOptions(&p.Options, os.Args[1:])
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to parse command line args")
@@ -54,7 +54,7 @@ func (p *poi) prepare() ([]string, error) {
 	return args, nil
 }
 
-func (p *poi) makeLabel() error {
+func (p *Poi) makeLabel() error {
 	if p.LabelAs != "" {
 		label, err := loadYAML(p.LabelAs)
 		if err != nil {

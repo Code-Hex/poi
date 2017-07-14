@@ -23,7 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-type poi struct {
+// Poi is main struct for command line
+type Poi struct {
 	Options
 	Label
 
@@ -47,14 +48,15 @@ var (
 	dataMap *dict
 )
 
-func New() *poi {
-	return &poi{
+// New return pointered "poi" struct
+func New() *Poi {
+	return &Poi{
 		stdout: os.Stdout,
 		uriMap: make(map[string]bool),
 	}
 }
 
-func (p *poi) init() {
+func (p *Poi) init() {
 	p.header = make([]string, 0, 15)
 
 	p.header = append(p.header, []string{
@@ -78,7 +80,7 @@ func (p *poi) init() {
 	dataMap = newDict()
 }
 
-func (p *poi) analyze() error {
+func (p *Poi) analyze() error {
 	p.init()
 	if p.TailMode {
 		return p.tailmode()
@@ -86,7 +88,7 @@ func (p *poi) analyze() error {
 	return p.normalmode()
 }
 
-func (p *poi) normalmode() error {
+func (p *Poi) normalmode() error {
 	b, err := ioutil.ReadFile(p.Filename)
 	if err != nil {
 		return exit.MakeIOErr(err)
@@ -106,7 +108,7 @@ func (p *poi) normalmode() error {
 	return nil
 }
 
-func (p *poi) tailmode() error {
+func (p *Poi) tailmode() error {
 	file, err := tail.TailFile(p.Filename, tailConfig())
 	if err != nil {
 		return exit.MakeIOErr(err)
@@ -173,7 +175,7 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 	}
 }
 
-func (p *poi) renderLikeTop(line int) {
+func (p *Poi) renderLikeTop(line int) {
 	//width, height := termbox.Size()
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
@@ -293,7 +295,7 @@ func (p *poi) renderLikeTop(line int) {
 	termbox.Flush()
 }
 
-func (p *poi) renderTable() {
+func (p *Poi) renderTable() {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader(p.header)
 
@@ -333,7 +335,7 @@ func (p *poi) renderTable() {
 	table.Render()
 }
 
-func (p *poi) makeResult(tmp map[string]string) error {
+func (p *Poi) makeResult(tmp map[string]string) error {
 	u, ok := tmp["uri"]
 	if !ok {
 		return errors.New("Could not found uri label")
