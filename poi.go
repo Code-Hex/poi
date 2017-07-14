@@ -311,21 +311,21 @@ func (p *poi) renderTable() {
 		}
 
 		if p.Expand {
-			tmp = append(tmp, []string{
+			tmp = append(tmp,
 				fmt.Sprintf("%.3f", val.p10),
 				fmt.Sprintf("%.3f", val.p50),
 				fmt.Sprintf("%.3f", val.p90),
 				fmt.Sprintf("%.3f", val.p95),
 				fmt.Sprintf("%.3f", val.p99),
-			}...)
+			)
 		}
 
-		tmp = append(tmp, []string{
+		tmp = append(tmp,
 			fmt.Sprintf("%.2f", val.minBody),
 			fmt.Sprintf("%.2f", val.maxBody),
 			fmt.Sprintf("%.2f", val.avgBody),
 			method, uri,
-		}...)
+		)
 
 		data = append(data, tmp)
 	}
