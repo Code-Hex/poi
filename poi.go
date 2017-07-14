@@ -177,16 +177,7 @@ func (p *poi) renderLikeTop(line int) {
 	//width, height := termbox.Size()
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
-	read := 0
-	for _, key := range dataMap.keys {
-		val := dataMap.get(key)
-		read += val.count
-	}
-	ignore := line - read
-
-	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
-	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
-
+	read := 0 // Number of rows could be read
 	sorted := dataMap.sortedKeys(p.Sortby)
 
 	// To adjust width
@@ -197,6 +188,8 @@ func (p *poi) renderLikeTop(line int) {
 
 	for _, key := range sorted {
 		val := dataMap.get(key)
+		read += val.count // Added number of rows
+
 		countStr := fmt.Sprintf("%d", val.count)
 		if l := len(countStr); l > countStrMaxLen {
 			countStrMaxLen = l
@@ -217,6 +210,12 @@ func (p *poi) renderLikeTop(line int) {
 			avgBodyStrMaxLen = l
 		}
 	}
+
+	// Number of rows could not be read
+	ignore := line - read
+
+	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
+	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
 
 	// Rendering for header
 	headerPosY := 4
