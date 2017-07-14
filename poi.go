@@ -47,8 +47,16 @@ var (
 	dataMap *dict
 )
 
+func New() *poi {
+	return &poi{
+		stdout: os.Stdout,
+		uriMap: make(map[string]bool),
+	}
+}
+
 func (p *poi) init() {
 	p.header = make([]string, 0, 15)
+
 	p.header = append(p.header, []string{
 		"COUNT",
 		"MIN", "MAX", "AVG",
@@ -167,6 +175,7 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 
 func (p *poi) renderLikeTop(line int) {
 	//width, height := termbox.Size()
+	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
 	read := 0
 	for _, key := range dataMap.keys {
@@ -175,54 +184,118 @@ func (p *poi) renderLikeTop(line int) {
 	}
 	ignore := line - read
 
-	renderStr(0, 0, fmt.Sprintf("Total URI number: %d\n", len(p.uriMap)))
-	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d\n\n", line, ignore))
+	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
+	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
 
-	// Rendering header
-	var header string
+	sorted := dataMap.sortedKeys(p.Sortby)
 
-	for _, v := range p.header {
-		header += fmt.Sprintf("%-9s", v)
+	// To adjust width
+	countStrMaxLen := 0
+	minBodyStrMaxLen := 6
+	maxBodyStrMaxLen := 6
+	avgBodyStrMaxLen := 6
+
+	for _, key := range sorted {
+		val := dataMap.get(key)
+		countStr := fmt.Sprintf("%d", val.count)
+		if l := len(countStr); l > countStrMaxLen {
+			countStrMaxLen = l
+		}
+
+		minBStr := fmt.Sprintf("%.2f", val.minBody)
+		if l := len(minBStr); l > minBodyStrMaxLen {
+			minBodyStrMaxLen = l
+		}
+
+		maxBStr := fmt.Sprintf("%.2f", val.maxBody)
+		if l := len(maxBStr); l > maxBodyStrMaxLen {
+			maxBodyStrMaxLen = l
+		}
+
+		avgBStr := fmt.Sprintf("%.2f", val.avgBody)
+		if l := len(avgBStr); l > avgBodyStrMaxLen {
+			avgBodyStrMaxLen = l
+		}
 	}
-	renderStr(0, 3, header)
+
+	// Rendering for header
+	headerPosY := 4
+	posXlist := make([]int, len(p.header), len(p.header))
+
+	for i, h := range p.header {
+		switch h {
+		case "COUNT":
+			var base int
+			if countStrMaxLen > 5 {
+				base = countStrMaxLen
+			} else {
+				base = 5
+			}
+			posXlist[1] = base + 2 // for "MIN"
+			renderStr(0, headerPosY, p.header[0])
+		case "MIN":
+			renderStr(posXlist[1], headerPosY, p.header[1])
+		case "MAX", "AVG", "STDEV":
+			posXlist[i] = posXlist[i-1] + 5 + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "P10", "P50", "P90", "P95", "P99":
+			posXlist[i] = posXlist[i-1] + 5 + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "BODYMIN":
+			posXlist[i] = posXlist[i-1] + 5 + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "BODYMAX":
+			posXlist[i] = posXlist[i-1] + minBodyStrMaxLen + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "BODYAVG":
+			posXlist[i] = posXlist[i-1] + avgBodyStrMaxLen + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "METHOD":
+			posXlist[i] = posXlist[i-1] + avgBodyStrMaxLen + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		case "URI":
+			posXlist[i] = posXlist[i-1] + 6 + 2
+			renderStr(posXlist[i], headerPosY, p.header[i])
+		}
+	}
 
 	// Rendering main data
-	for i, key := range dataMap.sortedKeys(p.Sortby) {
+	for i, key := range sorted {
 		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
 
-		format := "%-9d%-9.3f%-9.3f%-9.3f%-9.3f"
-		args := make([]interface{}, 0, 10)
-		args = append(args, []interface{}{
-			val.count,
-			val.minTime,
-			val.maxTime,
-			val.avgTime,
-			val.stdev,
-		}...)
+		posY := (headerPosY + 1) + i
+		renderStr(posXlist[0], posY, fmt.Sprintf("%d", val.count))
+		renderStr(posXlist[1], posY, fmt.Sprintf("%.3f", val.minTime)) // Strlen is 5 <- "0.000"
+		renderStr(posXlist[2], posY, fmt.Sprintf("%.3f", val.maxTime)) // Strlen is 5 <- "0.000"
+		renderStr(posXlist[3], posY, fmt.Sprintf("%.3f", val.avgTime)) // Strlen is 5 <- "0.000"
+		renderStr(posXlist[4], posY, fmt.Sprintf("%.3f", val.stdev))   // Strlen is 5 <- "0.000"
 
 		if p.Expand {
-			format += "%-9.3f%-9.3f%-9.3f%-9.3f%-9.3f"
-			args = append(args, []interface{}{
-				val.p10,
-				val.p50,
-				val.p90,
-				val.p95,
-				val.p99,
-			}...)
+			renderStr(posXlist[5], posY, fmt.Sprintf("%.3f", val.p10))      // Strlen is 5 <- "0.000"
+			renderStr(posXlist[6], posY, fmt.Sprintf("%.3f", val.p50))      // Strlen is 5 <- "0.000"
+			renderStr(posXlist[7], posY, fmt.Sprintf("%.3f", val.p90))      // Strlen is 5 <- "0.000"
+			renderStr(posXlist[8], posY, fmt.Sprintf("%.3f", val.p95))      // Strlen is 5 <- "0.000"
+			renderStr(posXlist[9], posY, fmt.Sprintf("%.3f", val.p99))      // Strlen is 5 <- "0.000"
+			renderStr(posXlist[10], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
+			renderStr(posXlist[11], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 4 <- "00.00"
+			renderStr(posXlist[12], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 4 <- "00.00"
+			renderStr(posXlist[13], posY, method)                           // "METHOD" len is 6"
+			renderStr(posXlist[14], posY, uri)
+		} else {
+			renderStr(posXlist[5], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
+			renderStr(posXlist[6], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 4 <- "00.00"
+			renderStr(posXlist[7], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 4 <- "00.00"
+			renderStr(posXlist[8], posY, method)                           // "METHOD" len is 6"
+			renderStr(posXlist[9], posY, uri)
 		}
 
-		format += "%-9.2f%-9.2f%-9.2f%-9s%-9s"
-		args = append(args, []interface{}{
-			val.minBody,
-			val.maxBody,
-			val.avgBody,
-			method, uri,
-		}...)
-
-		renderStr(0, 5+i, fmt.Sprintf(format, args...))
 	}
+
+	// Rendering header
+	//renderStr(0, 3, p.headerLayout)
+
 	termbox.Flush()
 }
 

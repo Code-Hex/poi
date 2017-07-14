@@ -14,13 +14,6 @@ const (
 	name    = "poi"
 )
 
-func New() *poi {
-	return &poi{
-		stdout: os.Stdout,
-		uriMap: make(map[string]bool),
-	}
-}
-
 func (p *poi) Run() int {
 	if e := p.run(); e != nil {
 		exitCode, err := UnwrapErrors(e)
