@@ -14,6 +14,7 @@ const (
 	name    = "poi"
 )
 
+// Run command line
 func (p *Poi) Run() int {
 	if e := p.run(); e != nil {
 		exitCode, err := UnwrapErrors(e)
