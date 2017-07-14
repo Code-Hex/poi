@@ -59,22 +59,22 @@ func New() *Poi {
 func (p *Poi) init() {
 	p.header = make([]string, 0, 15)
 
-	p.header = append(p.header, []string{
+	p.header = append(p.header,
 		"COUNT",
 		"MIN", "MAX", "AVG",
 		"STDEV",
-	}...)
+	)
 
 	if p.Expand {
-		p.header = append(p.header, []string{
+		p.header = append(p.header,
 			"P10", "P50", "P90", "P95", "P99",
-		}...)
+		)
 	}
 
-	p.header = append(p.header, []string{
+	p.header = append(p.header,
 		"BODYMIN", "BODYMAX", "BODYAVG",
 		"METHOD", "URI",
-	}...)
+	)
 
 	// dataMap is global
 	dataMap = newDict()
