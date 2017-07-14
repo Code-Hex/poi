@@ -191,9 +191,9 @@ func (p *poi) renderLikeTop(line int) {
 
 	// To adjust width
 	countStrMaxLen := 0
-	minBodyStrMaxLen := 6
-	maxBodyStrMaxLen := 6
-	avgBodyStrMaxLen := 6
+	minBodyStrMaxLen := 6 // "BODYMIN" length is 6
+	maxBodyStrMaxLen := 6 // "BODYMAX" length is 6
+	avgBodyStrMaxLen := 6 // "BODYAVG" length is 6
 
 	for _, key := range sorted {
 		val := dataMap.get(key)
@@ -222,6 +222,7 @@ func (p *poi) renderLikeTop(line int) {
 	headerPosY := 4
 	posXlist := make([]int, len(p.header), len(p.header))
 
+	// Get width to draw the data
 	for i, h := range p.header {
 		switch h {
 		case "COUNT":
@@ -271,7 +272,6 @@ func (p *poi) renderLikeTop(line int) {
 		renderStr(posXlist[2], posY, fmt.Sprintf("%.3f", val.maxTime)) // Strlen is 5 <- "0.000"
 		renderStr(posXlist[3], posY, fmt.Sprintf("%.3f", val.avgTime)) // Strlen is 5 <- "0.000"
 		renderStr(posXlist[4], posY, fmt.Sprintf("%.3f", val.stdev))   // Strlen is 5 <- "0.000"
-
 		if p.Expand {
 			renderStr(posXlist[5], posY, fmt.Sprintf("%.3f", val.p10))      // Strlen is 5 <- "0.000"
 			renderStr(posXlist[6], posY, fmt.Sprintf("%.3f", val.p50))      // Strlen is 5 <- "0.000"
@@ -279,23 +279,18 @@ func (p *poi) renderLikeTop(line int) {
 			renderStr(posXlist[8], posY, fmt.Sprintf("%.3f", val.p95))      // Strlen is 5 <- "0.000"
 			renderStr(posXlist[9], posY, fmt.Sprintf("%.3f", val.p99))      // Strlen is 5 <- "0.000"
 			renderStr(posXlist[10], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[11], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 4 <- "00.00"
-			renderStr(posXlist[12], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 4 <- "00.00"
+			renderStr(posXlist[11], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
+			renderStr(posXlist[12], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
 			renderStr(posXlist[13], posY, method)                           // "METHOD" len is 6"
 			renderStr(posXlist[14], posY, uri)
 		} else {
 			renderStr(posXlist[5], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[6], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 4 <- "00.00"
-			renderStr(posXlist[7], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 4 <- "00.00"
-			renderStr(posXlist[8], posY, method)                           // "METHOD" len is 6"
+			renderStr(posXlist[6], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
+			renderStr(posXlist[7], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
+			renderStr(posXlist[8], posY, method)                           // "METHOD" length is 6"
 			renderStr(posXlist[9], posY, uri)
 		}
-
 	}
-
-	// Rendering header
-	//renderStr(0, 3, p.headerLayout)
-
 	termbox.Flush()
 }
 
