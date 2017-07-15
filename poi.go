@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math"
 	"net/url"
@@ -27,9 +26,8 @@ import (
 type Poi struct {
 	Options
 	Label
-
+	// relate with uri data
 	header []string
-	stdout io.Writer
 	uriMap map[string]bool
 }
 
@@ -51,7 +49,6 @@ var (
 // New return pointered "poi" struct
 func New() *Poi {
 	return &Poi{
-		stdout: os.Stdout,
 		uriMap: make(map[string]bool),
 	}
 }
