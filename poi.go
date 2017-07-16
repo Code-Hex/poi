@@ -185,7 +185,7 @@ func (p *Poi) renderLikeTop(line int) {
 	maxBodyStrMaxLen := 6 // "BODYMAX" length is 6
 	avgBodyStrMaxLen := 6 // "BODYAVG" length is 6
 
-	for _, key := range sorted {
+	for _, key := range dataMap.keys {
 		val := dataMap.get(key)
 		read += val.count // Added number of rows
 
