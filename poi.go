@@ -42,8 +42,10 @@ type data struct {
 }
 
 var (
-	skip    error
-	dataMap *dict
+	skip       error
+	dataMap    *dict
+	posXlist   []int
+	headerPosY int
 )
 
 // New return pointered "poi" struct
@@ -72,6 +74,12 @@ func (p *Poi) init() {
 		"BODYMIN", "BODYMAX", "BODYAVG",
 		"METHOD", "URI",
 	)
+
+	// start header position
+	headerPosY = 4
+
+	// allocate for header
+	posXlist = make([]int, len(p.header), len(p.header))
 
 	// dataMap is global
 	dataMap = newDict()
@@ -124,7 +132,7 @@ func (p *Poi) tailmode() error {
 		termbox.Close()
 	}()
 
-	go monitorKeys(ctx, cancel, once)
+	go p.monitorKeys(ctx, cancel, once)
 
 tail:
 	for l := 1; ; l++ {
@@ -149,7 +157,7 @@ tail:
 	return nil
 }
 
-func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
+func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -164,6 +172,16 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				switch ev.Key {
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
+				case termbox.KeyArrowUp:
+					if dataMap.start > 0 {
+						dataMap.start--
+					}
+					p.renderData()
+				case termbox.KeyArrowDown:
+					if dataMap.start+dataMap.rownum < len(dataMap.keys) {
+						dataMap.start++
+					}
+					p.renderData()
 				}
 			case termbox.EventError:
 				panic(ev.Err)
@@ -173,11 +191,10 @@ func monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *Poi) renderLikeTop(line int) {
-	//width, height := termbox.Size()
+	// width, height := termbox.Size()
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
 	read := 0 // Number of rows could be read
-	sorted := dataMap.sortedKeys(p.Sortby)
 
 	// To adjust width
 	countStrMaxLen := 0
@@ -216,10 +233,6 @@ func (p *Poi) renderLikeTop(line int) {
 	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
 	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
 
-	// Rendering for header
-	headerPosY := 4
-	posXlist := make([]int, len(p.header), len(p.header))
-
 	// Get width to draw the data
 	for i, h := range p.header {
 		switch h {
@@ -257,14 +270,20 @@ func (p *Poi) renderLikeTop(line int) {
 			renderStr(posXlist[i], headerPosY, p.header[i])
 		}
 	}
+	p.renderData()
+}
 
+func (p *Poi) renderData() {
 	// Rendering main data
-	for i, key := range sorted {
+	for i, key := range dataMap.sortedKeys(p.Sortby) {
 		val := dataMap.get(key)
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
 
 		posY := (headerPosY + 1) + i
+
+		clearLine(posY)
+
 		renderStr(posXlist[0], posY, fmt.Sprintf("%d", val.count))
 		renderStr(posXlist[1], posY, fmt.Sprintf("%.3f", val.minTime)) // Strlen is 5 <- "0.000"
 		renderStr(posXlist[2], posY, fmt.Sprintf("%.3f", val.maxTime)) // Strlen is 5 <- "0.000"
@@ -502,6 +521,13 @@ func getPercentileIdx(len int, n int) int {
 		return 0
 	}
 	return idx
+}
+
+func clearLine(y int) {
+	width, _ := termbox.Size()
+	for i := 0; i < width; i++ {
+		termbox.SetCell(i, y, 0, termbox.ColorDefault, termbox.ColorDefault)
+	}
 }
 
 func renderStr(x, y int, str string) {

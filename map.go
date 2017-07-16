@@ -14,14 +14,16 @@ func init() {
 }
 
 type dict struct {
-	keys []string
-	m    map[string]*data
+	start, rownum int
+	keys          []string
+	m             map[string]*data
 }
 
 func newDict() *dict {
 	d := &dict{
-		keys: make([]string, 0),
-		m:    make(map[string]*data),
+		rownum: 2,
+		keys:   make([]string, 0),
+		m:      make(map[string]*data),
 	}
 	sortMethod["count"] = func(desc bool) func(i, j int) bool {
 		return func(i, j int) bool {
@@ -160,5 +162,10 @@ func (d *dict) sortedKeys(by string) []string {
 	} else {
 		sort.Slice(d.keys, sortMethod["count"](desc))
 	}
-	return d.keys
+
+	l := len(d.keys)
+	if d.start+d.rownum < l {
+		return d.keys[d.start : d.start+d.rownum]
+	}
+	return d.keys[d.start:l]
 }
