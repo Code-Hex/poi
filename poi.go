@@ -183,10 +183,26 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 					}
 					p.renderData()
 				}
+			case termbox.EventResize:
+				p.renderData()
 			case termbox.EventError:
 				panic(ev.Err)
 			}
 		}
+	}
+}
+
+func renderMiddleLine(width, height int) {
+	half := height / 2
+
+	if semihalf := half - 1; semihalf < len(dataMap.keys) {
+		dataMap.rownum = semihalf
+	} else {
+		dataMap.rownum = len(dataMap.keys)
+	}
+
+	for i := 0; i < width; i++ {
+		termbox.SetCell(i, half, '-', termbox.ColorDefault, termbox.ColorDefault)
 	}
 }
 
