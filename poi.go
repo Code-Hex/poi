@@ -29,6 +29,9 @@ type Poi struct {
 	// relate with uri data
 	header []string
 	uriMap map[string]bool
+	// logged for row number
+	row int
+	mu  sync.Mutex
 }
 
 type data struct {
@@ -51,6 +54,7 @@ var (
 // New return pointered "poi" struct
 func New() *Poi {
 	return &Poi{
+		row:    1,
 		uriMap: make(map[string]bool),
 	}
 }
@@ -113,6 +117,18 @@ func (p *Poi) normalmode() error {
 	return nil
 }
 
+func (p *Poi) rowInc() {
+	p.mu.Lock()
+	p.row++
+	p.mu.Unlock()
+}
+
+func (p *Poi) getRow() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.row
+}
+
 func (p *Poi) tailmode() error {
 	file, err := tail.TailFile(p.Filename, tailConfig())
 	if err != nil {
@@ -135,7 +151,7 @@ func (p *Poi) tailmode() error {
 	go p.monitorKeys(ctx, cancel, once)
 
 tail:
-	for l := 1; ; l++ {
+	for ; ; p.rowInc() {
 		select {
 		case <-ctx.Done():
 			break tail
@@ -149,9 +165,9 @@ tail:
 			}
 			data := parseLTSV(line.Text)
 			if err := p.makeResult(data); err != nil {
-				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
+				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.getRow())))
 			}
-			p.renderLikeTop(l)
+			p.renderLikeTop()
 		}
 	}
 	return nil
@@ -176,15 +192,15 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 					if dataMap.start > 0 {
 						dataMap.start--
 					}
-					p.renderData()
+					p.renderLikeTop()
 				case termbox.KeyArrowDown:
 					if dataMap.start+dataMap.rownum < len(dataMap.keys) {
 						dataMap.start++
 					}
-					p.renderData()
+					p.renderLikeTop()
 				}
 			case termbox.EventResize:
-				p.renderData()
+				p.renderLikeTop()
 			case termbox.EventError:
 				panic(ev.Err)
 			}
@@ -195,9 +211,10 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 func renderMiddleLine(width, height int) {
 	half := height / 2
 
-	if semihalf := half - 1; semihalf < len(dataMap.keys) {
+	if semihalf := (half - 1) - 4; semihalf < len(dataMap.keys) {
 		dataMap.rownum = semihalf
 	} else {
+		dataMap.start = 0
 		dataMap.rownum = len(dataMap.keys)
 	}
 
@@ -206,8 +223,7 @@ func renderMiddleLine(width, height int) {
 	}
 }
 
-func (p *Poi) renderLikeTop(line int) {
-	// width, height := termbox.Size()
+func (p *Poi) renderLikeTop() {
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
 	read := 0 // Number of rows could be read
@@ -244,6 +260,7 @@ func (p *Poi) renderLikeTop(line int) {
 	}
 
 	// Number of rows could not be read
+	line := p.getRow()
 	ignore := line - read
 
 	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
@@ -290,6 +307,9 @@ func (p *Poi) renderLikeTop(line int) {
 }
 
 func (p *Poi) renderData() {
+	// Rendering middle line
+	renderMiddleLine(termbox.Size())
+
 	// Rendering main data
 	for i, key := range dataMap.sortedKeys(p.Sortby) {
 		val := dataMap.get(key)
