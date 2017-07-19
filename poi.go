@@ -230,18 +230,26 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				}
 				// special keys
 				switch ev.Key {
+				case termbox.KeyTab:
+					topPane = !topPane // See screen.go
+					renderMiddleLine()
+					termbox.Flush()
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
 				case termbox.KeyArrowUp:
-					if dataMap.start > 0 {
-						dataMap.start--
+					if topPane {
+						if dataMap.start > 0 {
+							dataMap.start--
+						}
+						p.renderLikeTop()
 					}
-					p.renderLikeTop()
 				case termbox.KeyArrowDown:
-					if dataMap.start+dataMap.rownum < len(dataMap.keys) {
-						dataMap.start++
+					if topPane {
+						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
+							dataMap.start++
+						}
+						p.renderLikeTop()
 					}
-					p.renderLikeTop()
 				}
 			case termbox.EventResize:
 				p.renderLikeTop()
@@ -252,30 +260,37 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 	}
 }
 
-func renderMiddleLine(width, height int) {
-	half := height / 2
+func renderMiddleLine() {
+	width, height := termbox.Size()
+	whalf, hhalf := width/2, height/2
 
 	// 4 is line that info line + space line + header line
-	if semihalf := (half - 1) - 4; semihalf < len(dataMap.keys) {
+	if semihalf := (hhalf - 1) - 4; semihalf < len(dataMap.keys) {
 		dataMap.rownum = semihalf
 	} else {
 		dataMap.start = 0
 		dataMap.rownum = len(dataMap.keys)
 	}
 
-	for i := 0; i < width; i++ {
-		termbox.SetCell(i, half, '-', termbox.ColorDefault, termbox.ColorDefault)
-	}
-}
-
-func renderFileContent(width, height int) {
-	for afterHalf := height/2 + 1; afterHalf < height; afterHalf++ {
-		renderStr(0, afterHalf, fmt.Sprintf("%d !!", afterHalf))
+	if topPane {
+		for i := 0; i < whalf; i++ {
+			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
+		}
+		for i := whalf; i < width; i++ {
+			termbox.SetCell(i, hhalf, '-', foreground, background)
+		}
+	} else {
+		for i := 0; i < whalf; i++ {
+			termbox.SetCell(i, hhalf, '-', foreground, background)
+		}
+		for i := whalf; i < width; i++ {
+			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
+		}
 	}
 }
 
 func (p *Poi) renderLikeTop() {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+	clearPane()
 
 	read := 0 // Number of rows could be read
 
@@ -359,7 +374,7 @@ func (p *Poi) renderLikeTop() {
 
 func (p *Poi) renderData() {
 	// Rendering middle line
-	renderMiddleLine(termbox.Size())
+	renderMiddleLine()
 
 	// Rendering main data
 	for i, key := range dataMap.sortedKeys(p.Sortby) {
