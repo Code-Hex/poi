@@ -191,13 +191,26 @@ tail:
 
 func (p *Poi) tailFile(ctx context.Context, dataCh <-chan map[string]string) {
 	for {
-		// _, height := termbox.Size()
+		_, height := termbox.Size()
+		posMiddle := height / 2
 		select {
 		case <-ctx.Done():
 			return
 		case data := <-dataCh:
 			p.setLineData(data)
-
+		render:
+			for i, y := len(p.lineData)-1, 1; i >= 0; i-- {
+				d := p.lineData[i]
+				for _, key := range d.sortedKeys {
+					posY := height - y
+					if posY == posMiddle {
+						break render
+					}
+					clearLine(posY)
+					renderStr(0, posY, key+" : "+d.data[key])
+					y++
+				}
+			}
 			// clearLine(height)
 			// renderStr(0, height-1, text)
 		}
