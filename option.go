@@ -23,6 +23,7 @@ type Options struct {
 	Filename   string `short:"f" long:"file" required:"true" description:"specify the file of ltsv format access log"`
 	Sortby     string `long:"sort-by" default:"count,desc" description:"specify a format like 'label,order' for sorting"`
 	LabelAs    string `long:"label-as" description:"specify a yaml file with key and value for access log"`
+	Limit      int    `short:"l" long:"limit" default:"5000" description:"specify a maximum line ranges for access log to use"`
 	StackTrace bool   `long:"trace" description:"display detail error messages"`
 }
 

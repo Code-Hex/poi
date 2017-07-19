@@ -26,15 +26,24 @@ import (
 type Poi struct {
 	Options
 	Label
-	// relate with uri data
-	header []string
-	uriMap map[string]bool
+	// relate with access log data
+	header     []string
+	posXlist   []int
+	headerPosY int
+	uriMap     map[string]bool
+	lineData   []*data
 	// logged for row number
 	row int
 	mu  sync.Mutex
 }
 
 type data struct {
+	sortedKeys []string
+	data       map[string]string
+	needLines  int
+}
+
+type tableData struct {
 	count                              int
 	minTime, maxTime, avgTime          float64
 	stdev                              float64
@@ -45,10 +54,8 @@ type data struct {
 }
 
 var (
-	skip       error
-	dataMap    *dict
-	posXlist   []int
-	headerPosY int
+	skip    error
+	dataMap *dict
 )
 
 // New return pointered "poi" struct
@@ -60,7 +67,14 @@ func New() *Poi {
 }
 
 func (p *Poi) init() {
+	// Allocate for header
 	p.header = make([]string, 0, 15)
+
+	// Allocate to store log lines on memory
+	p.lineData = make([]*data, 0, p.Limit)
+
+	// Start header position on the screen
+	p.headerPosY = 4
 
 	p.header = append(p.header,
 		"COUNT",
@@ -79,13 +93,10 @@ func (p *Poi) init() {
 		"METHOD", "URI",
 	)
 
-	// start header position
-	headerPosY = 4
+	// Allocate for header
+	p.posXlist = make([]int, len(p.header), len(p.header))
 
-	// allocate for header
-	posXlist = make([]int, len(p.header), len(p.header))
-
-	// dataMap is global
+	// dataMap on the global
 	dataMap = newDict()
 }
 
@@ -150,6 +161,9 @@ func (p *Poi) tailmode() error {
 
 	go p.monitorKeys(ctx, cancel, once)
 
+	dataCh := make(chan map[string]string)
+	go p.tailFile(ctx, dataCh)
+
 tail:
 	for ; ; p.rowInc() {
 		select {
@@ -163,7 +177,9 @@ tail:
 			if line.Err != nil {
 				return exit.MakeIOErr(err)
 			}
+			// send text
 			data := parseLTSV(line.Text)
+			dataCh <- data
 			if err := p.makeResult(data); err != nil {
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.getRow())))
 			}
@@ -171,6 +187,21 @@ tail:
 		}
 	}
 	return nil
+}
+
+func (p *Poi) tailFile(ctx context.Context, dataCh <-chan map[string]string) {
+	for {
+		// _, height := termbox.Size()
+		select {
+		case <-ctx.Done():
+			return
+		case data := <-dataCh:
+			p.setLineData(data)
+
+			// clearLine(height)
+			// renderStr(0, height-1, text)
+		}
+	}
 }
 
 func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
@@ -211,6 +242,7 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 func renderMiddleLine(width, height int) {
 	half := height / 2
 
+	// 4 is line that info line + space line + header line
 	if semihalf := (half - 1) - 4; semihalf < len(dataMap.keys) {
 		dataMap.rownum = semihalf
 	} else {
@@ -220,6 +252,12 @@ func renderMiddleLine(width, height int) {
 
 	for i := 0; i < width; i++ {
 		termbox.SetCell(i, half, '-', termbox.ColorDefault, termbox.ColorDefault)
+	}
+}
+
+func renderFileContent(width, height int) {
+	for afterHalf := height/2 + 1; afterHalf < height; afterHalf++ {
+		renderStr(0, afterHalf, fmt.Sprintf("%d !!", afterHalf))
 	}
 }
 
@@ -266,7 +304,7 @@ func (p *Poi) renderLikeTop() {
 	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
 	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
 
-	// Get width to draw the data
+	// Get width to draw data
 	for i, h := range p.header {
 		switch h {
 		case "COUNT":
@@ -276,31 +314,31 @@ func (p *Poi) renderLikeTop() {
 			} else {
 				base = 5
 			}
-			posXlist[1] = base + 2 // for "MIN"
-			renderStr(0, headerPosY, p.header[0])
+			p.posXlist[1] = base + 2 // for "MIN"
+			renderStr(0, p.headerPosY, p.header[0])
 		case "MIN":
-			renderStr(posXlist[1], headerPosY, p.header[1])
+			renderStr(p.posXlist[1], p.headerPosY, p.header[1])
 		case "MAX", "AVG", "STDEV":
-			posXlist[i] = posXlist[i-1] + 5 + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + 5 + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "P10", "P50", "P90", "P95", "P99":
-			posXlist[i] = posXlist[i-1] + 5 + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + 5 + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "BODYMIN":
-			posXlist[i] = posXlist[i-1] + 5 + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + 5 + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "BODYMAX":
-			posXlist[i] = posXlist[i-1] + minBodyStrMaxLen + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + minBodyStrMaxLen + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "BODYAVG":
-			posXlist[i] = posXlist[i-1] + avgBodyStrMaxLen + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + avgBodyStrMaxLen + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "METHOD":
-			posXlist[i] = posXlist[i-1] + avgBodyStrMaxLen + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + avgBodyStrMaxLen + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		case "URI":
-			posXlist[i] = posXlist[i-1] + 6 + 2
-			renderStr(posXlist[i], headerPosY, p.header[i])
+			p.posXlist[i] = p.posXlist[i-1] + 6 + 2
+			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		}
 	}
 	p.renderData()
@@ -316,32 +354,32 @@ func (p *Poi) renderData() {
 		sep := strings.Split(key, ":")
 		uri, method := sep[0], sep[1]
 
-		posY := (headerPosY + 1) + i
+		posY := (p.headerPosY + 1) + i
 
 		clearLine(posY)
 
-		renderStr(posXlist[0], posY, fmt.Sprintf("%d", val.count))
-		renderStr(posXlist[1], posY, fmt.Sprintf("%.3f", val.minTime)) // Strlen is 5 <- "0.000"
-		renderStr(posXlist[2], posY, fmt.Sprintf("%.3f", val.maxTime)) // Strlen is 5 <- "0.000"
-		renderStr(posXlist[3], posY, fmt.Sprintf("%.3f", val.avgTime)) // Strlen is 5 <- "0.000"
-		renderStr(posXlist[4], posY, fmt.Sprintf("%.3f", val.stdev))   // Strlen is 5 <- "0.000"
+		renderStr(p.posXlist[0], posY, fmt.Sprintf("%d", val.count))
+		renderStr(p.posXlist[1], posY, fmt.Sprintf("%.3f", val.minTime)) // Strlen is 5 <- "0.000"
+		renderStr(p.posXlist[2], posY, fmt.Sprintf("%.3f", val.maxTime)) // Strlen is 5 <- "0.000"
+		renderStr(p.posXlist[3], posY, fmt.Sprintf("%.3f", val.avgTime)) // Strlen is 5 <- "0.000"
+		renderStr(p.posXlist[4], posY, fmt.Sprintf("%.3f", val.stdev))   // Strlen is 5 <- "0.000"
 		if p.Expand {
-			renderStr(posXlist[5], posY, fmt.Sprintf("%.3f", val.p10))      // Strlen is 5 <- "0.000"
-			renderStr(posXlist[6], posY, fmt.Sprintf("%.3f", val.p50))      // Strlen is 5 <- "0.000"
-			renderStr(posXlist[7], posY, fmt.Sprintf("%.3f", val.p90))      // Strlen is 5 <- "0.000"
-			renderStr(posXlist[8], posY, fmt.Sprintf("%.3f", val.p95))      // Strlen is 5 <- "0.000"
-			renderStr(posXlist[9], posY, fmt.Sprintf("%.3f", val.p99))      // Strlen is 5 <- "0.000"
-			renderStr(posXlist[10], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[11], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[12], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[13], posY, method)                           // "METHOD" len is 6"
-			renderStr(posXlist[14], posY, uri)
+			renderStr(p.posXlist[5], posY, fmt.Sprintf("%.3f", val.p10))      // Strlen is 5 <- "0.000"
+			renderStr(p.posXlist[6], posY, fmt.Sprintf("%.3f", val.p50))      // Strlen is 5 <- "0.000"
+			renderStr(p.posXlist[7], posY, fmt.Sprintf("%.3f", val.p90))      // Strlen is 5 <- "0.000"
+			renderStr(p.posXlist[8], posY, fmt.Sprintf("%.3f", val.p95))      // Strlen is 5 <- "0.000"
+			renderStr(p.posXlist[9], posY, fmt.Sprintf("%.3f", val.p99))      // Strlen is 5 <- "0.000"
+			renderStr(p.posXlist[10], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[11], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[12], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[13], posY, method)                           // "METHOD" len is 6"
+			renderStr(p.posXlist[14], posY, uri)
 		} else {
-			renderStr(posXlist[5], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[6], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[7], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
-			renderStr(posXlist[8], posY, method)                           // "METHOD" length is 6"
-			renderStr(posXlist[9], posY, uri)
+			renderStr(p.posXlist[5], posY, fmt.Sprintf("%.2f", val.minBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[6], posY, fmt.Sprintf("%.2f", val.maxBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[7], posY, fmt.Sprintf("%.2f", val.avgBody)) // Strlen is 5 <- "00.00"
+			renderStr(p.posXlist[8], posY, method)                           // "METHOD" length is 6"
+			renderStr(p.posXlist[9], posY, uri)
 		}
 	}
 	termbox.Flush()
@@ -444,7 +482,7 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 	key := uri + ":" + method
 	dict := dataMap.get(key)
 	if dict == nil {
-		dataMap.set(key, &data{
+		dataMap.set(key, &tableData{
 			count:         1,
 			minTime:       resTime,
 			maxTime:       resTime,
@@ -522,6 +560,7 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 	case '5':
 		dict.code5xx++
 	}
+
 	return nil
 }
 
@@ -559,19 +598,20 @@ func getPercentileIdx(len int, n int) int {
 	return idx
 }
 
-func clearLine(y int) {
-	width, _ := termbox.Size()
-	for i := 0; i < width; i++ {
-		termbox.SetCell(i, y, 0, termbox.ColorDefault, termbox.ColorDefault)
+func (p *Poi) setLineData(val map[string]string) {
+	l := len(val)
+	keys := make([]string, 0, l)
+	for k := range val {
+		keys = append(keys, k)
 	}
-}
+	sort.Strings(keys)
 
-func renderStr(x, y int, str string) {
-	renderStrWithColor(x, y, str, termbox.ColorDefault, termbox.ColorDefault)
-}
-
-func renderStrWithColor(x, y int, str string, fg, bg termbox.Attribute) {
-	for i, c := range str {
-		termbox.SetCell(x+i, y, c, fg, bg)
+	if len(p.lineData)+1 > p.Limit {
+		p.lineData = p.lineData[1:] // Remove a head
 	}
+	p.lineData = append(p.lineData, &data{
+		data:       val,
+		sortedKeys: keys,
+		needLines:  l,
+	})
 }

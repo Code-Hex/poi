@@ -16,14 +16,14 @@ func init() {
 type dict struct {
 	start, rownum int
 	keys          []string
-	m             map[string]*data
+	m             map[string]*tableData
 }
 
 func newDict() *dict {
 	d := &dict{
 		rownum: 2,
 		keys:   make([]string, 0),
-		m:      make(map[string]*data),
+		m:      make(map[string]*tableData),
 	}
 	sortMethod["count"] = func(desc bool) func(i, j int) bool {
 		return func(i, j int) bool {
@@ -132,14 +132,14 @@ func newDict() *dict {
 	return d
 }
 
-func (d *dict) set(key string, val *data) {
+func (d *dict) set(key string, val *tableData) {
 	if _, ok := d.m[key]; !ok {
 		d.keys = append(d.keys, key)
 	}
 	d.m[key] = val
 }
 
-func (d *dict) get(key string) *data {
+func (d *dict) get(key string) *tableData {
 	if v, ok := d.m[key]; ok {
 		return v
 	}
