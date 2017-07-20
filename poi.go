@@ -321,7 +321,7 @@ func (p *Poi) renderTopPane() {
 	// Number of rows could not be read
 	ignore := p.row - read
 
-	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
+	renderStr(0, 0, fmt.Sprintf("Total URI: %d", len(p.uriMap)))
 	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", p.row, ignore))
 
 	// Get width to draw data
