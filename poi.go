@@ -507,7 +507,6 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 			minTime:       resTime,
 			maxTime:       resTime,
 			avgTime:       resTime,
-			stdev:         0,
 			p10:           resTime,
 			p50:           resTime,
 			p90:           resTime,
