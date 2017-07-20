@@ -183,7 +183,7 @@ tail:
 			if err := p.makeResult(data); err != nil {
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.getRow())))
 			}
-			p.renderLikeTop()
+			p.renderTopPane()
 		}
 	}
 	return nil
@@ -191,28 +191,12 @@ tail:
 
 func (p *Poi) tailFile(ctx context.Context, dataCh <-chan map[string]string) {
 	for {
-		_, height := termbox.Size()
-		posMiddle := height / 2
 		select {
 		case <-ctx.Done():
 			return
 		case data := <-dataCh:
 			p.setLineData(data)
-		render:
-			for i, y := len(p.lineData)-1, 1; i >= 0; i-- {
-				d := p.lineData[i]
-				for _, key := range d.sortedKeys {
-					posY := height - y
-					if posY == posMiddle {
-						break render
-					}
-					clearLine(posY)
-					renderStr(0, posY, key+" : "+d.data[key])
-					y++
-				}
-			}
-			// clearLine(height)
-			// renderStr(0, height-1, text)
+			p.renderBottomPane()
 		}
 	}
 }
@@ -241,21 +225,39 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						if dataMap.start > 0 {
 							dataMap.start--
 						}
-						p.renderLikeTop()
+						p.renderTopPane()
 					}
 				case termbox.KeyArrowDown:
 					if topPane {
 						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
 							dataMap.start++
 						}
-						p.renderLikeTop()
+						p.renderTopPane()
 					}
 				}
 			case termbox.EventResize:
-				p.renderLikeTop()
+				p.renderTopPane()
 			case termbox.EventError:
 				panic(ev.Err)
 			}
+		}
+	}
+}
+
+func (p *Poi) renderBottomPane() {
+	_, height := termbox.Size()
+	posMiddle := height / 2
+render:
+	for i, y := len(p.lineData)-1, 1; i >= 0; i-- {
+		d := p.lineData[i]
+		for _, key := range d.sortedKeys {
+			posY := height - y
+			if posY == posMiddle {
+				break render
+			}
+			clearLine(posY)
+			renderStr(0, posY, key+" : "+d.data[key])
+			y++
 		}
 	}
 }
@@ -289,7 +291,7 @@ func renderMiddleLine() {
 	}
 }
 
-func (p *Poi) renderLikeTop() {
+func (p *Poi) renderTopPane() {
 	clearPane()
 
 	read := 0 // Number of rows could be read
