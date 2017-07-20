@@ -61,7 +61,6 @@ var (
 // New return pointered "poi" struct
 func New() *Poi {
 	return &Poi{
-		row:    1,
 		uriMap: make(map[string]bool),
 	}
 }
@@ -128,18 +127,6 @@ func (p *Poi) normalmode() error {
 	return nil
 }
 
-func (p *Poi) rowInc() {
-	p.mu.Lock()
-	p.row++
-	p.mu.Unlock()
-}
-
-func (p *Poi) getRow() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.row
-}
-
 func (p *Poi) tailmode() error {
 	file, err := tail.TailFile(p.Filename, tailConfig())
 	if err != nil {
@@ -165,7 +152,7 @@ func (p *Poi) tailmode() error {
 	go p.tailFile(ctx, dataCh)
 
 tail:
-	for ; ; p.rowInc() {
+	for {
 		select {
 		case <-ctx.Done():
 			break tail
@@ -177,11 +164,15 @@ tail:
 			if line.Err != nil {
 				return exit.MakeIOErr(err)
 			}
+
+			// Line increment
+			p.row++
+
 			// send text
 			data := parseLTSV(line.Text)
 			dataCh <- data
 			if err := p.makeResult(data); err != nil {
-				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.getRow())))
+				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.row)))
 			}
 			p.renderTopPane()
 		}
@@ -328,11 +319,10 @@ func (p *Poi) renderTopPane() {
 	}
 
 	// Number of rows could not be read
-	line := p.getRow()
-	ignore := line - read
+	ignore := p.row - read
 
 	renderStr(0, 0, fmt.Sprintf("Total URI number: %d", len(p.uriMap)))
-	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", line, ignore))
+	renderStr(0, 1, fmt.Sprintf("Read lines: %d, Ignore lines: %d", p.row, ignore))
 
 	// Get width to draw data
 	for i, h := range p.header {
