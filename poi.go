@@ -215,14 +215,14 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				case termbox.KeyArrowUp:
 					if topPane {
 						if dataMap.start > 0 {
-							dataMap.start--
+							dataMap.startDec()
 						}
 						p.renderTopPane()
 					}
 				case termbox.KeyArrowDown:
 					if topPane {
 						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
-							dataMap.start++
+							dataMap.startInc()
 						}
 						p.renderTopPane()
 					}
@@ -245,31 +245,35 @@ func (p *Poi) renderBottomPane() {
 	p.curLine = l
 
 	rowNum := p.curLine
-	if h := height - posMiddle - 2; p.curLine >= l-h {
+	if h := height - 1 - (posMiddle + 1); p.curLine >= l-h {
 		rowNum = l - h
 	}
 
 	for y := posMiddle + 1; y < height; y, rowNum = y+1, rowNum+1 {
 		clearLine(y)
-		renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
-			termbox.ColorYellow,
-			background,
-		)
+		if p.curLine == rowNum {
+			renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
+				termbox.ColorYellow,
+				background,
+			)
+		} else {
+			renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
+				termbox.ColorWhite,
+				background,
+			)
+		}
 	}
 
 	posX := digit + 2
-render:
-	for i, y := l-1, 1; i >= 0; i-- {
-		d := p.lineData[i]
-		for _, key := range d.sortedKeys {
-			posY := height - y
-			if posY == posMiddle {
-				break render
-			}
-			//clearLine(posY)
-			renderStr(posX, posY, key+" : "+d.data[key])
-			y++
+	d := p.lineData[p.curLine]
+	for _, key := range d.sortedKeys {
+		posY := height - y
+		if posY == posMiddle {
+			break render
 		}
+		//clearLine(posY)
+		renderStr(posX, posY, key+" : "+d.data[key])
+		y++
 	}
 }
 
