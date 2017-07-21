@@ -32,6 +32,7 @@ type Poi struct {
 	headerPosY int
 	uriMap     map[string]bool
 	lineData   []*data
+	curLine    int
 	// logged for row number
 	row int
 	mu  sync.Mutex
@@ -238,16 +239,35 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 func (p *Poi) renderBottomPane() {
 	_, height := termbox.Size()
 	posMiddle := height / 2
+
+	l := len(p.lineData)
+	digit := len(fmt.Sprintf("%d", l))
+	p.curLine = l
+
+	rowNum := p.curLine
+	if h := height - posMiddle - 2; p.curLine >= l-h {
+		rowNum = l - h
+	}
+
+	for y := posMiddle + 1; y < height; y, rowNum = y+1, rowNum+1 {
+		clearLine(y)
+		renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
+			termbox.ColorYellow,
+			background,
+		)
+	}
+
+	posX := digit + 2
 render:
-	for i, y := len(p.lineData)-1, 1; i >= 0; i-- {
+	for i, y := l-1, 1; i >= 0; i-- {
 		d := p.lineData[i]
 		for _, key := range d.sortedKeys {
 			posY := height - y
 			if posY == posMiddle {
 				break render
 			}
-			clearLine(posY)
-			renderStr(0, posY, key+" : "+d.data[key])
+			//clearLine(posY)
+			renderStr(posX, posY, key+" : "+d.data[key])
 			y++
 		}
 	}
