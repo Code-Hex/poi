@@ -45,7 +45,6 @@ type Poi struct {
 type data struct {
 	sortedKeys []string
 	data       map[string]string
-	needLines  int
 }
 
 type tableData struct {
@@ -672,7 +671,6 @@ func (p *Poi) setLineData(val map[string]string) {
 	p.lineData = append(p.lineData, &data{
 		data:       val,
 		sortedKeys: keys,
-		needLines:  l,
 	})
 	p.curLine++
 }
