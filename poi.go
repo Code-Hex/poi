@@ -27,14 +27,17 @@ import (
 type Poi struct {
 	Options
 	Label
-	// relate with access log data
+
+	// Related with access log data
 	header     []string
 	posXlist   []int
 	headerPosY int
 	uriMap     map[string]bool
 	lineData   []*data
 	curLine    int
-	// logged for row number
+	dataIdx    int
+
+	// Logged for row number
 	row int
 	mu  sync.Mutex
 }
@@ -177,6 +180,7 @@ tail:
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.row)))
 			}
 			p.renderTopPane()
+			termbox.Flush()
 		}
 	}
 	return nil
@@ -219,14 +223,37 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 							dataMap.startDec()
 						}
 						p.renderTopPane()
+					} else {
+						if p.dataIdx == 0 && p.curLine > 1 {
+							p.curLine--
+						} else if p.dataIdx > 0 {
+							p.dataIdx--
+						}
+						p.renderBottomPane()
 					}
+					termbox.Flush()
 				case termbox.KeyArrowDown:
 					if topPane {
 						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
 							dataMap.startInc()
 						}
 						p.renderTopPane()
+					} else {
+						_, height := termbox.Size()
+						middle := height / 2
+
+						d := p.lineData[p.curLine-1]
+						if l := len(d.sortedKeys); p.curLine < len(p.lineData) {
+							if middle-p.dataIdx == l {
+								p.curLine++
+								p.dataIdx = 0
+							} else if p.dataIdx < l {
+								p.dataIdx++
+							}
+						}
+						p.renderBottomPane()
 					}
+					termbox.Flush()
 				}
 			case termbox.EventResize:
 				p.renderTopPane()
@@ -238,12 +265,13 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *Poi) renderBottomPane() {
+	clearPane()
+
 	_, height := termbox.Size()
 	posMiddle := height / 2
 
 	l := len(p.lineData)
 	digit := len(fmt.Sprintf("%d", l))
-	p.curLine = l
 
 	rowNum := p.curLine
 	if h := height - 1 - (posMiddle + 1); p.curLine >= l-h {
@@ -252,8 +280,8 @@ func (p *Poi) renderBottomPane() {
 
 	// for rendering data
 	d := p.lineData[p.curLine-1]
-	keys := d.sortedKeys
-	l, idx := len(keys), 0
+	l, idx := len(d.sortedKeys), p.dataIdx
+
 	spaces := digit + 3
 
 	// render
@@ -272,7 +300,7 @@ func (p *Poi) renderBottomPane() {
 		}
 
 		if idx < l {
-			key := keys[idx]
+			key := d.sortedKeys[idx]
 			renderStr(spaces, y, key+" : "+d.data[key])
 			idx++
 		}
@@ -428,7 +456,6 @@ func (p *Poi) renderData() {
 			renderStr(p.posXlist[9], posY, uri)
 		}
 	}
-	termbox.Flush()
 }
 
 func (p *Poi) renderTable() {
@@ -659,4 +686,5 @@ func (p *Poi) setLineData(val map[string]string) {
 		sortedKeys: keys,
 		needLines:  l,
 	})
+	p.curLine++
 }
