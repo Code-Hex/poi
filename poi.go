@@ -153,9 +153,6 @@ func (p *Poi) tailmode() error {
 
 	go p.monitorKeys(ctx, cancel, once)
 
-	dataCh := make(chan map[string]string)
-	go p.tailFile(ctx, dataCh)
-
 tail:
 	for {
 		select {
@@ -175,27 +172,15 @@ tail:
 
 			// send text
 			data := parseLTSV(line.Text)
-			dataCh <- data
 			if err := p.makeResult(data); err != nil {
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.row)))
 			}
-			p.renderTopPane()
-			termbox.Flush()
+			p.setLineData(data)
+			p.renderAll()
+			p.flush()
 		}
 	}
 	return nil
-}
-
-func (p *Poi) tailFile(ctx context.Context, dataCh <-chan map[string]string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case data := <-dataCh:
-			p.setLineData(data)
-			p.renderBottomPane()
-		}
-	}
 }
 
 func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
@@ -212,9 +197,8 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				// special keys
 				switch ev.Key {
 				case termbox.KeyTab:
-					topPane = !topPane // See screen.go
+					switchPane()
 					renderMiddleLine()
-					termbox.Flush()
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
 				case termbox.KeyArrowUp:
@@ -231,7 +215,6 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						}
 						p.renderBottomPane()
 					}
-					termbox.Flush()
 				case termbox.KeyArrowDown:
 					if topPane {
 						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
@@ -240,7 +223,7 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						p.renderTopPane()
 					} else {
 						_, height := termbox.Size()
-						middle := height / 2
+						middle := height/2 - 1
 
 						d := p.lineData[p.curLine-1]
 						if l := len(d.sortedKeys); p.curLine < len(p.lineData) {
@@ -253,15 +236,23 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						}
 						p.renderBottomPane()
 					}
-					termbox.Flush()
 				}
 			case termbox.EventResize:
-				p.renderTopPane()
+				p.renderAll()
 			case termbox.EventError:
 				panic(ev.Err)
 			}
+			p.flush()
 		}
 	}
+}
+
+func (p *Poi) renderAll() {
+	p.renderTopPane()
+	switchPane()
+
+	p.renderBottomPane()
+	switchPane()
 }
 
 func (p *Poi) renderBottomPane() {
@@ -415,10 +406,7 @@ func (p *Poi) renderTopPane() {
 			renderStr(p.posXlist[i], p.headerPosY, p.header[i])
 		}
 	}
-	p.renderData()
-}
 
-func (p *Poi) renderData() {
 	// Rendering middle line
 	renderMiddleLine()
 

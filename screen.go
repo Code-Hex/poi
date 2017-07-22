@@ -9,6 +9,10 @@ const (
 
 var topPane = true
 
+func switchPane() {
+	topPane = !topPane
+}
+
 func clearLine(y int) {
 	width, _ := termbox.Size()
 	for i := 0; i < width; i++ {
@@ -42,4 +46,10 @@ func clearPane() {
 			}
 		}
 	}
+}
+
+func (p *Poi) flush() {
+	p.mu.Lock()
+	termbox.Flush()
+	p.mu.Unlock()
 }
