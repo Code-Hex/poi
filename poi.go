@@ -16,8 +16,9 @@ import (
 	"sync"
 
 	"github.com/Code-Hex/exit"
-	"github.com/hpcloud/tail"
 	termbox "github.com/nsf/termbox-go"
+
+	"github.com/hpcloud/tail"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 )
@@ -249,6 +250,13 @@ func (p *Poi) renderBottomPane() {
 		rowNum = l - h
 	}
 
+	// for rendering data
+	d := p.lineData[p.curLine-1]
+	keys := d.sortedKeys
+	l, idx := len(keys), 0
+	spaces := digit + 3
+
+	// render
 	for y := posMiddle + 1; y < height; y, rowNum = y+1, rowNum+1 {
 		clearLine(y)
 		if p.curLine == rowNum {
@@ -262,18 +270,12 @@ func (p *Poi) renderBottomPane() {
 				background,
 			)
 		}
-	}
 
-	posX := digit + 2
-	d := p.lineData[p.curLine]
-	for _, key := range d.sortedKeys {
-		posY := height - y
-		if posY == posMiddle {
-			break render
+		if idx < l {
+			key := keys[idx]
+			renderStr(spaces, y, key+" : "+d.data[key])
+			idx++
 		}
-		//clearLine(posY)
-		renderStr(posX, posY, key+" : "+d.data[key])
-		y++
 	}
 }
 
