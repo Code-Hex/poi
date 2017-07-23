@@ -48,6 +48,12 @@ func clearPane() {
 	}
 }
 
+func (p *Poi) fetchTermSize() {
+	p.mu.Lock()
+	p.width, p.height = termbox.Size()
+	p.mu.Unlock()
+}
+
 func (p *Poi) flush() {
 	p.mu.Lock()
 	termbox.Flush()

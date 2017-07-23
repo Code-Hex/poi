@@ -28,6 +28,9 @@ type Poi struct {
 	Options
 	Label
 
+	// window size
+	width, height int
+
 	// Related with access log data
 	header     []string
 	posXlist   []int
@@ -140,7 +143,6 @@ func (p *Poi) tailmode() error {
 	if err := termbox.Init(); err != nil {
 		return exit.MakeSoftWare(err)
 	}
-	termbox.SetInputMode(termbox.InputEsc)
 
 	once := new(sync.Once)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,6 +151,8 @@ func (p *Poi) tailmode() error {
 		once.Do(cancel)
 		termbox.Close()
 	}()
+
+	termbox.SetInputMode(termbox.InputEsc)
 
 	go p.monitorKeys(ctx, cancel, once)
 
@@ -197,7 +201,7 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				switch ev.Key {
 				case termbox.KeyTab:
 					switchPane()
-					renderMiddleLine()
+					p.renderMiddleLine()
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
 				case termbox.KeyArrowUp:
@@ -221,9 +225,7 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						}
 						p.renderTopPane()
 					} else {
-						_, height := termbox.Size()
-						middle := height/2 - 1
-
+						middle := p.height/2 - 1
 						d := p.lineData[p.curLine-1]
 						if l := len(d.sortedKeys); p.curLine < len(p.lineData) {
 							if middle-p.dataIdx == l {
@@ -247,7 +249,10 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *Poi) renderAll() {
+	p.fetchTermSize()
+
 	p.renderTopPane()
+	p.renderMiddleLine()
 	switchPane()
 
 	p.renderBottomPane()
@@ -257,14 +262,13 @@ func (p *Poi) renderAll() {
 func (p *Poi) renderBottomPane() {
 	clearPane()
 
-	_, height := termbox.Size()
-	posMiddle := height / 2
+	posMiddle := p.height / 2
 
 	l := len(p.lineData)
 	digit := len(fmt.Sprintf("%d", l))
 
 	rowNum := p.curLine
-	if h := height - 1 - (posMiddle + 1); p.curLine >= l-h {
+	if h := p.height - 1 - (posMiddle + 1); p.curLine >= l-h {
 		rowNum = l - h
 	}
 
@@ -275,7 +279,7 @@ func (p *Poi) renderBottomPane() {
 	spaces := digit + 3
 
 	// render
-	for y := posMiddle + 1; y < height; y, rowNum = y+1, rowNum+1 {
+	for y := posMiddle + 1; y < p.height; y, rowNum = y+1, rowNum+1 {
 		clearLine(y)
 		if p.curLine == rowNum {
 			renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
@@ -297,30 +301,21 @@ func (p *Poi) renderBottomPane() {
 	}
 }
 
-func renderMiddleLine() {
-	width, height := termbox.Size()
-	whalf, hhalf := width/2, height/2
-
-	// 4 is line that info line + space line + header line
-	if semihalf := (hhalf - 1) - 4; semihalf < len(dataMap.keys) {
-		dataMap.rownum = semihalf
-	} else {
-		dataMap.start = 0
-		dataMap.rownum = len(dataMap.keys)
-	}
+func (p *Poi) renderMiddleLine() {
+	whalf, hhalf := p.width/2, p.height/2
 
 	if topPane {
 		for i := 0; i < whalf; i++ {
 			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
 		}
-		for i := whalf; i < width; i++ {
+		for i := whalf; i < p.width; i++ {
 			termbox.SetCell(i, hhalf, '-', foreground, background)
 		}
 	} else {
 		for i := 0; i < whalf; i++ {
 			termbox.SetCell(i, hhalf, '-', foreground, background)
 		}
-		for i := whalf; i < width; i++ {
+		for i := whalf; i < p.width; i++ {
 			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
 		}
 	}
@@ -406,8 +401,14 @@ func (p *Poi) renderTopPane() {
 		}
 	}
 
-	// Rendering middle line
-	renderMiddleLine()
+	hhalf := p.height / 2
+	// 4 is lines + space lines + header line
+	if semihalf := (hhalf - 1) - 4; semihalf < len(dataMap.keys) {
+		dataMap.rownum = semihalf
+	} else {
+		dataMap.start = 0
+		dataMap.rownum = len(dataMap.keys)
+	}
 
 	// Rendering main data
 	for i, key := range dataMap.sortedKeys(p.Sortby) {
@@ -644,7 +645,7 @@ func parseLTSV(text string) map[string]string {
 func tailConfig() tail.Config {
 	return tail.Config{
 		MustExist: true,
-		Poll:      true,
+		ReOpen:    false,
 		Follow:    true,
 	}
 }
