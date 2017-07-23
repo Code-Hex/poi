@@ -130,6 +130,7 @@ func (p *Poi) normalmode() error {
 	if err := sc.Err(); err != nil {
 		return exit.MakeSoftWare(errors.Wrap(err, "Failed to read file"))
 	}
+	dataMap.rownum = len(dataMap.keys)
 	p.renderTable()
 	return nil
 }
