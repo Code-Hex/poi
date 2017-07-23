@@ -305,18 +305,20 @@ func (p *Poi) renderMiddleLine() {
 	whalf, hhalf := p.width/2, p.height/2
 
 	if topPane {
-		for i := 0; i < whalf; i++ {
-			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
-		}
-		for i := whalf; i < p.width; i++ {
-			termbox.SetCell(i, hhalf, '-', foreground, background)
+		for i := 0; i < p.width; i++ {
+			if i < whalf {
+				termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
+			} else {
+				termbox.SetCell(i, hhalf, '-', foreground, background)
+			}
 		}
 	} else {
-		for i := 0; i < whalf; i++ {
-			termbox.SetCell(i, hhalf, '-', foreground, background)
-		}
-		for i := whalf; i < p.width; i++ {
-			termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
+		for i := 0; i < p.width; i++ {
+			if i < whalf {
+				termbox.SetCell(i, hhalf, '-', foreground, background)
+			} else {
+				termbox.SetCell(i, hhalf, '-', termbox.ColorGreen, background)
+			}
 		}
 	}
 }
