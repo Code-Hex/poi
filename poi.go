@@ -648,7 +648,6 @@ func parseLTSV(text string) map[string]string {
 func tailConfig() tail.Config {
 	return tail.Config{
 		MustExist: true,
-		ReOpen:    false,
 		Follow:    true,
 	}
 }
