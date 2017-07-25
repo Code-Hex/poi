@@ -51,17 +51,13 @@ func (p *Poi) renderTable() {
 
 func (p *Poi) renderAll() {
 	p.fetchTermSize()
-
 	p.renderTopPane()
 	p.renderMiddleLine()
-	switchPane()
-
 	p.renderBottomPane()
-	switchPane()
 }
 
 func (p *Poi) renderBottomPane() {
-	clearPane()
+	clearPane(false)
 
 	posMiddle := p.height / 2
 
@@ -125,7 +121,7 @@ func (p *Poi) renderMiddleLine() {
 }
 
 func (p *Poi) renderTopPane() {
-	clearPane()
+	clearPane(true)
 
 	read := 0 // Number of rows could be read
 

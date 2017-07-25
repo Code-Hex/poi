@@ -30,10 +30,10 @@ func renderStrWithColor(x, y int, str string, fg, bg termbox.Attribute) {
 	}
 }
 
-func clearPane() {
+func clearPane(top bool) {
 	width, height := termbox.Size()
 	half := height / 2
-	if topPane {
+	if top {
 		for x := 0; x < width; x++ {
 			for y := 0; y < half; y++ {
 				termbox.SetCell(x, y, 0, foreground, background)
