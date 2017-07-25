@@ -223,16 +223,21 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 						}
 						p.renderTopPane()
 					} else {
-						middle := p.height/2 - 1
+						bottom := p.height - (p.height/2 + 1)
 						d := p.lineData[p.curLine-1]
 						if l := len(d.sortedKeys); p.curLine < len(p.lineData) {
-							if middle-p.dataIdx == l {
+							if bottom+p.dataIdx >= l {
 								p.curLine++
 								p.dataIdx = 0
 							} else if p.dataIdx < l {
 								p.dataIdx++
 							}
+						} else if p.curLine == len(p.lineData) {
+							if bottom+p.dataIdx < l {
+								p.dataIdx++
+							}
 						}
+
 						p.renderBottomPane()
 					}
 				}
