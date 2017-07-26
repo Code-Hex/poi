@@ -3,7 +3,6 @@ package poi
 import (
 	"sort"
 	"strings"
-	"sync"
 )
 
 type sortFunc func(asc bool) func(i, j int) bool
@@ -18,7 +17,6 @@ type dict struct {
 	start, rownum int
 	keys          []string
 	m             map[string]*tableData
-	mu            sync.Mutex
 }
 
 func newDict() *dict {
@@ -146,18 +144,6 @@ func (d *dict) get(key string) *tableData {
 		return v
 	}
 	return nil
-}
-
-func (d *dict) startInc() {
-	d.mu.Lock()
-	d.start++
-	d.mu.Unlock()
-}
-
-func (d *dict) startDec() {
-	d.mu.Lock()
-	d.start--
-	d.mu.Unlock()
 }
 
 func (d *dict) sortedKeys(by string) []string {

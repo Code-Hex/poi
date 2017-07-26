@@ -203,43 +203,9 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 				case termbox.KeyEsc, termbox.KeyCtrlC:
 					once.Do(cancel)
 				case termbox.KeyArrowUp:
-					if topPane {
-						if dataMap.start > 0 {
-							dataMap.startDec()
-						}
-						p.renderTopPane()
-					} else {
-						if p.dataIdx == 0 && p.curLine > 1 {
-							p.curLine--
-						} else if p.dataIdx > 0 {
-							p.dataIdx--
-						}
-						p.renderBottomPane()
-					}
+					p.arrowUpAction()
 				case termbox.KeyArrowDown:
-					if topPane {
-						if dataMap.start+dataMap.rownum < len(dataMap.keys) {
-							dataMap.startInc()
-						}
-						p.renderTopPane()
-					} else {
-						bottom := p.height - (p.height/2 + 1)
-						d := p.lineData[p.curLine-1]
-						if l := len(d.sortedKeys); p.curLine < len(p.lineData) {
-							if bottom+p.dataIdx >= l {
-								p.curLine++
-								p.dataIdx = 0
-							} else if p.dataIdx < l {
-								p.dataIdx++
-							}
-						} else if p.curLine == len(p.lineData) {
-							if bottom+p.dataIdx < l {
-								p.dataIdx++
-							}
-						}
-
-						p.renderBottomPane()
-					}
+					p.arrowDownAction()
 				}
 			case termbox.EventResize:
 				p.renderAll()
@@ -330,12 +296,14 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 		dict.responseTimes = append(dict.responseTimes, resTime)
 		sort.Float64s(dict.responseTimes)
 
+		// Get the index for percentile
 		p10idx := getPercentileIdx(dict.count, 10)
 		p50idx := getPercentileIdx(dict.count, 50)
 		p90idx := getPercentileIdx(dict.count, 90)
 		p95idx := getPercentileIdx(dict.count, 95)
 		p99idx := getPercentileIdx(dict.count, 99)
 
+		// Get percentiles
 		dict.p10 = dict.responseTimes[p10idx]
 		dict.p50 = dict.responseTimes[p50idx]
 		dict.p90 = dict.responseTimes[p90idx]
