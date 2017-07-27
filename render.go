@@ -203,12 +203,10 @@ func (p *Poi) renderTopPane() {
 	hhalf := p.height / 2
 	// 4 is lines + space lines + header line
 	if semihalf := (hhalf - 1) - 4; semihalf < len(dataMap.keys) {
-		dataMap.rownum = semihalf
+		dataMap.setRow(semihalf)
 	} else {
-		dataMap.start = 0
-		dataMap.rownum = len(dataMap.keys)
+		dataMap.resetRangeInfo()
 	}
-
 	// Rendering main data
 	for i, key := range dataMap.sortedKeys(p.Sortby) {
 		val := dataMap.get(key)

@@ -18,6 +18,7 @@ import (
 
 	"github.com/hpcloud/tail"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Poi is main struct for command line
@@ -39,12 +40,20 @@ type Poi struct {
 
 	// Logged for row number
 	row int
-	mu  sync.Mutex
+
+	// Tasks
+	count int
+	mu    sync.Mutex
 }
 
 type data struct {
 	sortedKeys []string
 	data       map[string]string
+}
+
+type lineData struct {
+	row int
+	tmp map[string]string
 }
 
 type tableData struct {
@@ -142,83 +151,113 @@ func (p *Poi) tailmode() error {
 		return exit.MakeSoftWare(err)
 	}
 
-	once := new(sync.Once)
-	ctx, cancel := context.WithCancel(context.Background())
+	sendCh := make(chan lineData)
+	flush := make(chan struct{})
 
-	defer func() {
-		once.Do(cancel)
-		termbox.Close()
-	}()
-
+	defer termbox.Close()
 	termbox.SetInputMode(termbox.InputEsc)
 
-	go p.monitorKeys(ctx, cancel, once)
+	grp, ctx := errgroup.WithContext(context.Background())
 
-tail:
-	for {
-		select {
-		case <-ctx.Done():
-			break tail
-		case line := <-file.Lines:
-			if line == nil {
-				// wait again only select
-				continue
-			}
-			if line.Err != nil {
-				return exit.MakeIOErr(err)
-			}
+	grp.Go(p.monitorKeys)
 
-			// Line increment
-			p.row++
-
-			// send text
-			data := parseLTSV(line.Text)
-			if err := p.makeResult(data); err != nil {
-				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.row)))
-			}
+	grp.Go(func() error {
+		for range flush {
 			p.renderAll()
 			p.flush()
 		}
-	}
-	return nil
+		return nil
+	})
+
+	grp.Go(func() error {
+		defer func() {
+			close(sendCh)
+		}()
+
+		row := 0
+		for line := range file.Lines {
+			if line.Err != nil {
+				return exit.MakeIOErr(line.Err)
+			}
+			// Line increment
+			row++
+			sendCh <- lineData{row, parseLTSV(line.Text)}
+		}
+		return nil
+	})
+
+	grp.Go(func() error {
+		defer close(flush)
+		for line := range sendCh {
+			p.setLineData(line.tmp) // This method to watch the log
+			if err := p.makeResult(line.tmp); err != nil {
+				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", line.row)))
+			}
+			p.row = line.row
+			flush <- struct{}{}
+		}
+		return nil
+	})
+
+	grp.Go(func() error {
+		<-ctx.Done()
+		return file.Stop()
+	})
+
+	return grp.Wait()
 }
 
-func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
+func (p *Poi) monitorKeys() error {
+monitor:
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			switch ev := termbox.PollEvent(); ev.Type {
-			case termbox.EventKey:
-				if ev.Ch == 'q' {
-					once.Do(cancel)
-				}
-				// special keys
-				switch ev.Key {
-				case termbox.KeyTab:
-					switchPane()
-					p.renderMiddleLine()
-				case termbox.KeyEsc, termbox.KeyCtrlC:
-					once.Do(cancel)
-				case termbox.KeyArrowUp:
-					p.arrowUpAction()
-				case termbox.KeyArrowDown:
-					p.arrowDownAction()
-				}
-			case termbox.EventResize:
-				p.renderAll()
-			case termbox.EventError:
-				panic(ev.Err)
+		switch ev := termbox.PollEvent(); ev.Type {
+		case termbox.EventKey:
+			if ev.Ch == 'q' {
+				break monitor
 			}
-			p.flush()
+			// special keys
+			switch ev.Key {
+			case termbox.KeyEsc, termbox.KeyCtrlC:
+				break monitor
+			case termbox.KeyTab:
+				switchPane()
+				p.renderMiddleLine()
+			case termbox.KeyArrowUp:
+				p.arrowUpAction()
+			case termbox.KeyArrowDown:
+				p.arrowDownAction()
+			}
+		case termbox.EventResize:
+			p.renderAll()
+		case termbox.EventError:
+			return exit.MakeSoftWare(ev.Err)
 		}
+		p.flush()
 	}
+	return errors.New("Finish")
+}
+
+func (p *Poi) addTask() {
+	p.mu.Lock()
+	p.count++
+	p.mu.Unlock()
+}
+
+func (p *Poi) doneTask() {
+	p.mu.Lock()
+	if p.count--; p.count < 0 {
+		panic("tasks over decrement")
+	}
+	p.mu.Unlock()
+}
+
+func (p *Poi) isZeroTask() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.count == 0
 }
 
 func (p *Poi) makeResult(tmp map[string]string) error {
-	p.setLineData(tmp) // This method to watch the log
-
 	u, ok := tmp["uri"]
 	if !ok {
 		return errors.New("Could not found uri label")
@@ -379,6 +418,7 @@ func parseLTSV(text string) map[string]string {
 func tailConfig() tail.Config {
 	return tail.Config{
 		MustExist: true,
+		ReOpen:    true,
 		Follow:    true,
 	}
 }
