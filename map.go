@@ -5,12 +5,13 @@ import (
 	"strings"
 )
 
-type sortFunc func(asc bool) func(i, j int) bool
+type sortFunc func(i, j int) bool
 
-var sortMethod map[string]sortFunc
+var sortMethod map[string]func(bool) sortFunc
 
 func init() {
-	sortMethod = make(map[string]sortFunc, 13)
+	sortMethod = make(map[string]func(bool) sortFunc, 13)
+
 }
 
 type dict struct {
@@ -21,11 +22,10 @@ type dict struct {
 
 func newDict() *dict {
 	d := &dict{
-		rownum: 2,
-		keys:   make([]string, 0),
-		m:      make(map[string]*tableData),
+		keys: make([]string, 0),
+		m:    make(map[string]*tableData),
 	}
-	sortMethod["count"] = func(desc bool) func(i, j int) bool {
+	sortMethod["count"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).count > d.get(d.keys[j]).count
@@ -33,7 +33,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).count < d.get(d.keys[j]).count
 		}
 	}
-	sortMethod["min"] = func(desc bool) func(i, j int) bool {
+	sortMethod["min"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).minTime > d.get(d.keys[j]).minTime
@@ -41,7 +41,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).minTime < d.get(d.keys[j]).minTime
 		}
 	}
-	sortMethod["max"] = func(desc bool) func(i, j int) bool {
+	sortMethod["max"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).maxTime > d.get(d.keys[j]).maxTime
@@ -49,7 +49,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).maxTime < d.get(d.keys[j]).maxTime
 		}
 	}
-	sortMethod["avg"] = func(desc bool) func(i, j int) bool {
+	sortMethod["avg"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).avgTime > d.get(d.keys[j]).avgTime
@@ -57,7 +57,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).avgTime < d.get(d.keys[j]).avgTime
 		}
 	}
-	sortMethod["avg"] = func(desc bool) func(i, j int) bool {
+	sortMethod["avg"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).stdev > d.get(d.keys[j]).stdev
@@ -65,7 +65,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).stdev < d.get(d.keys[j]).stdev
 		}
 	}
-	sortMethod["p10"] = func(desc bool) func(i, j int) bool {
+	sortMethod["p10"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).p10 > d.get(d.keys[j]).p10
@@ -73,7 +73,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).p10 < d.get(d.keys[j]).p10
 		}
 	}
-	sortMethod["p50"] = func(desc bool) func(i, j int) bool {
+	sortMethod["p50"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).p50 > d.get(d.keys[j]).p50
@@ -81,7 +81,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).p50 < d.get(d.keys[j]).p50
 		}
 	}
-	sortMethod["p90"] = func(desc bool) func(i, j int) bool {
+	sortMethod["p90"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).p90 > d.get(d.keys[j]).p90
@@ -89,7 +89,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).p90 < d.get(d.keys[j]).p90
 		}
 	}
-	sortMethod["p95"] = func(desc bool) func(i, j int) bool {
+	sortMethod["p95"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).p95 > d.get(d.keys[j]).p95
@@ -97,7 +97,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).p95 < d.get(d.keys[j]).p95
 		}
 	}
-	sortMethod["p99"] = func(desc bool) func(i, j int) bool {
+	sortMethod["p99"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).p99 > d.get(d.keys[j]).p99
@@ -105,7 +105,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).p99 < d.get(d.keys[j]).p99
 		}
 	}
-	sortMethod["bodymin"] = func(desc bool) func(i, j int) bool {
+	sortMethod["bodymin"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).minBody > d.get(d.keys[j]).minBody
@@ -113,7 +113,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).minBody < d.get(d.keys[j]).minBody
 		}
 	}
-	sortMethod["bodymax"] = func(desc bool) func(i, j int) bool {
+	sortMethod["bodymax"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).maxBody > d.get(d.keys[j]).maxBody
@@ -121,7 +121,7 @@ func newDict() *dict {
 			return d.get(d.keys[i]).maxBody < d.get(d.keys[j]).maxBody
 		}
 	}
-	sortMethod["bodyavg"] = func(desc bool) func(i, j int) bool {
+	sortMethod["bodyavg"] = func(desc bool) sortFunc {
 		return func(i, j int) bool {
 			if desc {
 				return d.get(d.keys[i]).avgBody > d.get(d.keys[j]).avgBody

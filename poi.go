@@ -176,7 +176,6 @@ tail:
 			if err := p.makeResult(data); err != nil {
 				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", p.row)))
 			}
-			p.setLineData(data)
 			p.renderAll()
 			p.flush()
 		}
@@ -218,6 +217,8 @@ func (p *Poi) monitorKeys(ctx context.Context, cancel func(), once *sync.Once) {
 }
 
 func (p *Poi) makeResult(tmp map[string]string) error {
+	p.setLineData(tmp) // This method to watch the log
+
 	u, ok := tmp["uri"]
 	if !ok {
 		return errors.New("Could not found uri label")
