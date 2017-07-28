@@ -21,6 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var mu sync.RWMutex
+
 // Poi is main struct for command line
 type Poi struct {
 	Options
@@ -43,7 +45,6 @@ type Poi struct {
 
 	// Tasks
 	count int
-	mu    sync.Mutex
 }
 
 type data struct {
@@ -151,15 +152,15 @@ func (p *Poi) tailmode() error {
 		return exit.MakeSoftWare(err)
 	}
 
+	var once sync.Once
+
 	sendCh := make(chan lineData)
 	flush := make(chan struct{})
 
 	defer termbox.Close()
 	termbox.SetInputMode(termbox.InputEsc)
 
-	grp, ctx := errgroup.WithContext(context.Background())
-
-	grp.Go(p.monitorKeys)
+	grp, _ := errgroup.WithContext(context.Background())
 
 	grp.Go(func() error {
 		for range flush {
@@ -171,6 +172,9 @@ func (p *Poi) tailmode() error {
 
 	grp.Go(func() error {
 		defer func() {
+			once.Do(func() {
+				file.Stop()
+			})
 			close(sendCh)
 		}()
 
@@ -200,61 +204,60 @@ func (p *Poi) tailmode() error {
 	})
 
 	grp.Go(func() error {
-		<-ctx.Done()
-		return file.Stop()
+		defer once.Do(func() {
+			file.Stop()
+		})
+	monitor:
+		for {
+			switch ev := termbox.PollEvent(); ev.Type {
+			case termbox.EventKey:
+				if ev.Ch == 'q' {
+					break monitor
+				}
+				// special keys
+				switch ev.Key {
+				case termbox.KeyEsc, termbox.KeyCtrlC:
+					break monitor
+				case termbox.KeyTab:
+					switchPane()
+					p.renderMiddleLine()
+				case termbox.KeyArrowUp:
+					p.arrowUpAction()
+				case termbox.KeyArrowDown:
+					p.arrowDownAction()
+				}
+			case termbox.EventResize:
+				p.renderAll()
+			case termbox.EventError:
+				return exit.MakeSoftWare(ev.Err)
+			}
+			p.flush()
+		}
+		return nil
 	})
 
 	return grp.Wait()
 }
 
-func (p *Poi) monitorKeys() error {
-monitor:
-	for {
-		switch ev := termbox.PollEvent(); ev.Type {
-		case termbox.EventKey:
-			if ev.Ch == 'q' {
-				break monitor
-			}
-			// special keys
-			switch ev.Key {
-			case termbox.KeyEsc, termbox.KeyCtrlC:
-				break monitor
-			case termbox.KeyTab:
-				switchPane()
-				p.renderMiddleLine()
-			case termbox.KeyArrowUp:
-				p.arrowUpAction()
-			case termbox.KeyArrowDown:
-				p.arrowDownAction()
-			}
-		case termbox.EventResize:
-			p.renderAll()
-		case termbox.EventError:
-			return exit.MakeSoftWare(ev.Err)
-		}
-		p.flush()
-	}
-	return errors.New("Finish")
-}
-
 func (p *Poi) addTask() {
-	p.mu.Lock()
+	mu.Lock()
 	p.count++
-	p.mu.Unlock()
+	mu.Unlock()
 }
 
 func (p *Poi) doneTask() {
-	p.mu.Lock()
+	mu.Lock()
 	if p.count--; p.count < 0 {
 		panic("tasks over decrement")
 	}
-	p.mu.Unlock()
+	mu.Unlock()
 }
 
 func (p *Poi) isZeroTask() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.count == 0
+	mu.RLock()
+	count := p.count
+	mu.RUnlock()
+	return count == 0
 }
 
 func (p *Poi) makeResult(tmp map[string]string) error {

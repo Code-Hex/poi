@@ -13,9 +13,8 @@ func switchPane() {
 	topPane = !topPane
 }
 
-func clearLine(y int) {
-	width, _ := termbox.Size()
-	for i := 0; i < width; i++ {
+func (p *Poi) clearLine(y int) {
+	for i := 0; i < p.width; i++ {
 		termbox.SetCell(i, y, 0, foreground, background)
 	}
 }
@@ -30,18 +29,17 @@ func renderStrWithColor(x, y int, str string, fg, bg termbox.Attribute) {
 	}
 }
 
-func clearPane(isTopPane bool) {
-	width, height := termbox.Size()
-	half := height / 2
+func (p *Poi) clearPane(isTopPane bool) {
+	half := p.height / 2
 	if isTopPane {
-		for x := 0; x < width; x++ {
+		for x := 0; x < p.width; x++ {
 			for y := 0; y < half; y++ {
 				termbox.SetCell(x, y, 0, foreground, background)
 			}
 		}
 	} else {
-		for x := 0; x < width; x++ {
-			for y := half + 1; y < height; y++ {
+		for x := 0; x < p.width; x++ {
+			for y := half + 1; y < p.height; y++ {
 				termbox.SetCell(x, y, 0, foreground, background)
 			}
 		}
@@ -49,13 +47,13 @@ func clearPane(isTopPane bool) {
 }
 
 func (p *Poi) fetchTermSize() {
-	p.mu.Lock()
+	mu.Lock()
 	p.width, p.height = termbox.Size()
-	p.mu.Unlock()
+	mu.Unlock()
 }
 
 func (p *Poi) flush() {
-	p.mu.Lock()
+	mu.Lock()
 	termbox.Flush()
-	p.mu.Unlock()
+	mu.Unlock()
 }

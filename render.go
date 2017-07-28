@@ -57,7 +57,7 @@ func (p *Poi) renderAll() {
 }
 
 func (p *Poi) renderBottomPane() {
-	clearPane(false)
+	p.clearPane(false)
 
 	posMiddle := p.height / 2
 
@@ -77,7 +77,7 @@ func (p *Poi) renderBottomPane() {
 
 	// render
 	for y := posMiddle + 1; y < p.height; y, rowNum = y+1, rowNum+1 {
-		clearLine(y)
+		p.clearLine(y)
 		if p.curLine == rowNum {
 			renderStrWithColor(0, y, fmt.Sprintf(" %*d ", digit, rowNum),
 				termbox.ColorYellow,
@@ -121,7 +121,7 @@ func (p *Poi) renderMiddleLine() {
 }
 
 func (p *Poi) renderTopPane() {
-	clearPane(true)
+	p.clearPane(true)
 
 	read := 0 // Number of rows could be read
 
@@ -215,7 +215,7 @@ func (p *Poi) renderTopPane() {
 
 		posY := (p.headerPosY + 1) + i
 
-		clearLine(posY)
+		p.clearLine(posY)
 
 		renderStr(p.posXlist[0], posY, fmt.Sprintf("%d", val.count))
 		renderStr(p.posXlist[1], posY, fmt.Sprintf("%.3f", val.minTime)) // Strlen is 5 <- "0.000"
