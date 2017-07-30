@@ -152,15 +152,14 @@ func (p *Poi) tailmode() error {
 		return exit.MakeSoftWare(err)
 	}
 
-	var once sync.Once
+	var otail sync.Once
 
 	sendCh := make(chan lineData)
 	flush := make(chan struct{})
-
-	defer termbox.Close()
 	termbox.SetInputMode(termbox.InputEsc)
 
 	grp, _ := errgroup.WithContext(context.Background())
+	defer termbox.Close()
 
 	grp.Go(func() error {
 		for range flush {
@@ -172,7 +171,7 @@ func (p *Poi) tailmode() error {
 
 	grp.Go(func() error {
 		defer func() {
-			once.Do(func() {
+			otail.Do(func() {
 				file.Stop()
 			})
 			close(sendCh)
@@ -190,23 +189,27 @@ func (p *Poi) tailmode() error {
 		return nil
 	})
 
-	grp.Go(func() error {
-		defer close(flush)
-		for line := range sendCh {
-			p.setLineData(line.tmp) // This method to watch the log
-			if err := p.makeResult(line.tmp); err != nil {
-				return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", line.row)))
+	var once sync.Once
+	for n := 0; n < 2; n++ {
+		grp.Go(func() error {
+			defer once.Do(func() { close(flush) })
+			for line := range sendCh {
+				p.setLineData(line.tmp) // This method to watch the log
+				if err := p.makeResult(line.tmp); err != nil {
+					return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", line.row)))
+				}
+				p.row = line.row
+				flush <- struct{}{}
 			}
-			p.row = line.row
-			flush <- struct{}{}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 
 	grp.Go(func() error {
-		defer once.Do(func() {
+		defer otail.Do(func() {
 			file.Stop()
 		})
+
 	monitor:
 		for {
 			switch ev := termbox.PollEvent(); ev.Type {
