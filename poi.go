@@ -68,8 +68,8 @@ type tableData struct {
 }
 
 var (
-	skip    error
 	dataMap *dict
+	skip    = makeSkipError()
 )
 
 // New return pointered "poi" struct
@@ -130,9 +130,14 @@ func (p *Poi) normalmode() error {
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	for l := 1; sc.Scan(); l++ {
 		data := parseLTSV(sc.Text())
-		if err := p.makeResult(data); err != nil {
+		label, err := p.parseLabel(data)
+		if err != nil {
+			if _, ok := err.(skipErr); ok {
+				continue
+			}
 			return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", l)))
 		}
+		p.makeResult(label)
 	}
 	if err := sc.Err(); err != nil {
 		return exit.MakeSoftWare(errors.Wrap(err, "Failed to read file"))
@@ -195,9 +200,14 @@ func (p *Poi) tailmode() error {
 			defer once.Do(func() { close(flush) })
 			for line := range sendCh {
 				p.setLineData(line.tmp) // This method to watch the log
-				if err := p.makeResult(line.tmp); err != nil {
+				label, err := p.parseLabel(line.tmp)
+				if err != nil {
+					if _, ok := err.(skipErr); ok {
+						continue
+					}
 					return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", line.row)))
 				}
+				p.makeResult(label)
 				p.row = line.row
 				flush <- struct{}{}
 			}
@@ -263,14 +273,21 @@ func (p *Poi) isZeroTask() bool {
 	return count == 0
 }
 
-func (p *Poi) makeResult(tmp map[string]string) error {
+type parsedLabel struct {
+	uri, method string
+	statusCode  string
+	resTime     float64
+	bodySize    float64
+}
+
+func (p *Poi) parseLabel(tmp map[string]string) (*parsedLabel, error) {
 	u, ok := tmp["uri"]
 	if !ok {
-		return errors.New("Could not found uri label")
+		return nil, errors.New("Could not found uri label")
 	}
 	parsed, err := url.Parse(u)
 	if err != nil {
-		return skip
+		return nil, skip
 	}
 	uri := parsed.Path
 
@@ -281,12 +298,12 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 
 	statusCode, ok := tmp[p.StatusLabel]
 	if !ok {
-		return errors.New("Could not found status label")
+		return nil, errors.New("Could not found status label")
 	}
 
 	apptime, ok := tmp[p.ApptimeLabel]
 	if !ok {
-		return errors.New("Could not found apptime label")
+		return nil, errors.New("Could not found apptime label")
 	}
 
 	resTime, err := strconv.ParseFloat(apptime, 64)
@@ -294,52 +311,61 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 		var reqTime float64
 		req, ok := tmp[p.ReqtimeLabel]
 		if !ok {
-			return errors.New("Could not found reqtime label")
+			return nil, errors.New("Could not found reqtime label")
 		}
 		reqTime, err = strconv.ParseFloat(req, 64)
 		if err != nil {
-			return skip
+			return nil, skip
 		}
 		resTime = reqTime
 	}
 
 	size, ok := tmp[p.SizeLabel]
 	if !ok {
-		return errors.New("Could not found size label")
+		return nil, errors.New("Could not found size label")
 	}
 	bodySize, err := strconv.ParseFloat(size, 64)
 	if err != nil {
-		return skip
+		return nil, skip
 	}
 
 	method, ok := tmp[p.MethodLabel]
 	if !ok {
-		return errors.New("Could not found method label")
+		return nil, errors.New("Could not found method label")
 	}
+	return &parsedLabel{
+		uri:        uri,
+		method:     method,
+		statusCode: statusCode,
+		resTime:    resTime,
+		bodySize:   bodySize,
+	}, nil
+}
 
-	key := uri + ":" + method
+func (p *Poi) makeResult(l *parsedLabel) {
+	key := l.uri + ":" + l.method
 	dict := dataMap.get(key)
 	if dict == nil {
 		dataMap.set(key, &tableData{
 			count:         1,
-			minTime:       resTime,
-			maxTime:       resTime,
-			avgTime:       resTime,
-			p10:           resTime,
-			p50:           resTime,
-			p90:           resTime,
-			p95:           resTime,
-			p99:           resTime,
-			minBody:       bodySize,
-			maxBody:       bodySize,
-			avgBody:       bodySize,
-			responseTimes: []float64{resTime},
+			minTime:       l.resTime,
+			maxTime:       l.resTime,
+			avgTime:       l.resTime,
+			p10:           l.resTime,
+			p50:           l.resTime,
+			p90:           l.resTime,
+			p95:           l.resTime,
+			p99:           l.resTime,
+			minBody:       l.bodySize,
+			maxBody:       l.bodySize,
+			avgBody:       l.bodySize,
+			responseTimes: []float64{l.resTime},
 		})
 		dict = dataMap.get(key)
 	} else {
 		dict.count++
 		// Current response time
-		dict.responseTimes = append(dict.responseTimes, resTime)
+		dict.responseTimes = append(dict.responseTimes, l.resTime)
 		sort.Float64s(dict.responseTimes)
 
 		// Get the index for percentile
@@ -356,17 +382,17 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 		dict.p95 = dict.responseTimes[p95idx]
 		dict.p99 = dict.responseTimes[p99idx]
 
-		if dict.maxTime < resTime {
-			dict.maxTime = resTime
+		if dict.maxTime < l.resTime {
+			dict.maxTime = l.resTime
 		}
-		if dict.minTime > resTime || dict.minTime == 0 {
-			dict.minTime = resTime
+		if dict.minTime > l.resTime || dict.minTime == 0 {
+			dict.minTime = l.resTime
 		}
 		now := float64(dict.count)
 		before := now - 1.0
 
 		// newAvg = (oldAvg * lenOfoldAvg + newVal) / lenOfnewAvg
-		dict.avgTime = (dict.avgTime*before + resTime) / now
+		dict.avgTime = (dict.avgTime*before + l.resTime) / now
 
 		// standard deviation
 		// stdev = √[(1 / n - 1) * {Σ(xi - avg) ^ 2}]
@@ -378,18 +404,18 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 		dict.stdev = math.Sqrt(stdev / before)
 
 		// Current response body size
-		if dict.maxBody < bodySize {
-			dict.maxBody = bodySize
+		if dict.maxBody < l.bodySize {
+			dict.maxBody = l.bodySize
 		}
-		if dict.minBody > bodySize || dict.minBody == 0 {
-			dict.minBody = bodySize
+		if dict.minBody > l.bodySize || dict.minBody == 0 {
+			dict.minBody = l.bodySize
 		}
 		// newAvg = (oldAvg * lenOfoldAvg + newVal) / lenOfnewAvg
-		dict.avgBody = (dict.avgBody*before + bodySize) / now
+		dict.avgBody = (dict.avgBody*before + l.bodySize) / now
 	}
 
 	// Current status code
-	switch statusCode[0] {
+	switch l.statusCode[0] {
 	case '2':
 		dict.code2xx++
 	case '3':
@@ -399,8 +425,6 @@ func (p *Poi) makeResult(tmp map[string]string) error {
 	case '5':
 		dict.code5xx++
 	}
-
-	return nil
 }
 
 func parseLTSV(text string) map[string]string {

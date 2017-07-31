@@ -8,6 +8,12 @@ type exiter interface {
 	ExitCode() int
 }
 
+type skipErr struct{}
+
+func (skipErr) Error() string { return "skip" }
+
+func makeSkipError() error { return skipErr{} }
+
 // UnwrapErrors get important message from wrapped error message
 func UnwrapErrors(err error) (int, error) {
 	for e := err; e != nil; {
