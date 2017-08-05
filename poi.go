@@ -3,7 +3,6 @@ package poi
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -11,14 +10,17 @@ import (
 	"sort"
 	"strconv"
 
+	"golang.org/x/sync/errgroup"
+
 	"sync"
 
 	"github.com/Code-Hex/exit"
 	termbox "github.com/nsf/termbox-go"
 
+	"runtime"
+
 	"github.com/hpcloud/tail"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 var mu sync.RWMutex
@@ -65,6 +67,13 @@ type tableData struct {
 	maxBody, minBody, avgBody          float64
 	code2xx, code3xx, code4xx, code5xx int
 	responseTimes                      []float64
+}
+
+type parsedLabel struct {
+	uri, method string
+	statusCode  string
+	resTime     float64
+	bodySize    float64
 }
 
 var (
@@ -159,11 +168,14 @@ func (p *Poi) tailmode() error {
 
 	var otail sync.Once
 
-	sendCh := make(chan lineData)
+	ncpu := runtime.NumCPU()
+
 	flush := make(chan struct{})
+	sendCh := make(chan lineData, ncpu*2)
+	labelCh := make(chan *parsedLabel, ncpu*2)
 	termbox.SetInputMode(termbox.InputEsc)
 
-	grp, _ := errgroup.WithContext(context.Background())
+	var grp errgroup.Group
 	defer termbox.Close()
 
 	grp.Go(func() error {
@@ -194,10 +206,13 @@ func (p *Poi) tailmode() error {
 		return nil
 	})
 
-	var once sync.Once
-	for n := 0; n < 2; n++ {
+	var (
+		olabel sync.Once
+		oflush sync.Once
+	)
+	for n := 0; n < ncpu; n++ {
 		grp.Go(func() error {
-			defer once.Do(func() { close(flush) })
+			defer olabel.Do(func() { close(labelCh) })
 			for line := range sendCh {
 				p.setLineData(line.tmp) // This method to watch the log
 				label, err := p.parseLabel(line.tmp)
@@ -207,13 +222,21 @@ func (p *Poi) tailmode() error {
 					}
 					return exit.MakeSoftWare(errors.Wrap(err, fmt.Sprintf("at line: %d", line.row)))
 				}
-				p.makeResult(label)
 				p.row = line.row
-				flush <- struct{}{}
+				labelCh <- label
 			}
 			return nil
 		})
 	}
+
+	grp.Go(func() error {
+		defer oflush.Do(func() { close(flush) })
+		for label := range labelCh {
+			p.makeResult(label)
+			flush <- struct{}{}
+		}
+		return nil
+	})
 
 	grp.Go(func() error {
 		defer otail.Do(func() {
@@ -271,13 +294,6 @@ func (p *Poi) isZeroTask() bool {
 	count := p.count
 	mu.RUnlock()
 	return count == 0
-}
-
-type parsedLabel struct {
-	uri, method string
-	statusCode  string
-	resTime     float64
-	bodySize    float64
 }
 
 func (p *Poi) parseLabel(tmp map[string]string) (*parsedLabel, error) {
